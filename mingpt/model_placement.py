@@ -155,30 +155,22 @@ class GPT(nn.Module):
         self.chassis_dimy = exp_config.chassis_dim[1]
 
         logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
-
-        # -------------------------------------------------------------------------------------
-        # self.state_encoder_s = nn.Sequential(nn.Conv2d(3, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-        #                          nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-        #                          nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-        #                          nn.Flatten(), nn.Linear(1600, config.n_embd-2))
-        #=> my changed the first convolution from [(3, 16, 8)] to [(8, 16, 8)]
         
-        # => f (my) July
-        # self.state_encoder_s = nn.Sequential(nn.Conv2d(8, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-        #                          nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-        #                          nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-        #                          nn.Flatten(), nn.Linear(16, config.n_embd-16))  # Added -16 to incorporate meta data
         
-        self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-                                 nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-                                 nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-                                 nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
+        if not(exp_config.num_meta_features) == 0:
+            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
+                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
+                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+                                    nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
+        else:
+            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
+                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
+                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+                                    nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
         
         self.meta_encoder_s = nn.Sequential(nn.Linear(self.num_mfeatures, 32), nn.ReLU(), nn.Linear(32, self.num_mfeatures))
         
 
-        # small kernel conv
-        # => my July
         self.action_head = nn.Sequential(nn.Conv2d(3, 3+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
                                  nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
                                  nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
@@ -187,14 +179,7 @@ class GPT(nn.Module):
                                  nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
                                  nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
                                  nn.Flatten())
-        # self.action_head = nn.Sequential(nn.Conv2d(3, 8, 1, stride=1, padding=0), nn.ReLU(), # 
-        #                          nn.Conv2d(8, 8, 1, stride=1, padding=0), nn.ReLU(), 
-        #                          nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-        #                          nn.Flatten())
-        # self.action_head_s = nn.Sequential(nn.Conv2d(1, 8, 1, stride=1, padding=0), nn.ReLU(), # 
-        #                          nn.Conv2d(8, 8, 1, stride=1, padding=0), nn.ReLU(), 
-        #                          nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-        #                          nn.Flatten())
+        
 
         self.one_kernel = nn.Sequential(nn.Conv2d(2, 1, 1, stride=1, padding=0), nn.Flatten())
 
@@ -212,6 +197,7 @@ class GPT(nn.Module):
         
         self.action_embeddings_s = nn.Embedding(self.chassis_dimx*self.chassis_dimy, config.n_embd)
         
+        self.exp_config = exp_config
 
     def get_block_size(self):
         return self.block_size
@@ -298,20 +284,21 @@ class GPT(nn.Module):
         if actions is not None and len(actions.shape) == 2:
             actions = actions.unsqueeze(-1)
         
-        if meta_states is None:
-            assert False
-        else:
-            circuit_embeddings = circuit_feas
-            
-            state_embeddings = self.state_encoder_s(
-                states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
-                )
-                    
+        # if meta_states is None:
+        #     assert False
+        # else:
+        circuit_embeddings = circuit_feas
+        
+        state_embeddings = self.state_encoder_s(
+            states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
+            )
+        if not(self.exp_config.num_meta_features == 0):        
             meta_embeddings = self.meta_encoder_s(
                 meta_states[:, :].reshape(-1, self.num_mfeatures)
                 )
             state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
-            state_embeddings = nn.Tanh()(state_embeddings)
+        
+        state_embeddings = nn.Tanh()(state_embeddings)
             
 
         # batch / sequence / n_embd

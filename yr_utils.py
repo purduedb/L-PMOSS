@@ -606,19 +606,21 @@ def gen_token_for_eval(exp_config):
     idx_array, grid_features = load_hardware_snapshot(exp_config)
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
-    cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts = load_uncore_features_intel(exp_config)
-    mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
+    if not(exp_config.num_meta_features == 0):
+        cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts = load_uncore_features_intel(exp_config)
+        mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
     
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features+1))
 
-    mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
-    scaler_mc = StandardScaler()
-    mc_tput = scaler_mc.fit_transform(mc_tput)
-    mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
-    mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
+    if not(exp_config.num_meta_features == 0):
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
+        scaler_mc = StandardScaler()
+        mc_tput = scaler_mc.fit_transform(mc_tput)
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
+        mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
     
     orginal_max_tput_dset = find_correct_max_tput(exp_config) * exp_config.rtg_scale
     # orginal_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale
@@ -653,8 +655,9 @@ def gen_token_for_eval(exp_config):
         act_ = load_actions(exp_config, cfg_)
         actions.append(act_)
 
-        # Load the meta mc_data
-        metas.append(mc_tput[_])
+        if not(exp_config.num_meta_features == 0):
+            # Load the meta mc_data
+            metas.append(mc_tput[_])
 
         # TODO: This needs some serious thought
         # obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 3)
@@ -790,8 +793,9 @@ def gen_token_for_eval(exp_config):
     print(done_idxs.shape)
     print(timesteps.shape)
     
-    metas = np.reshape(np.asarray(metas), (obss_s.shape[0], -1))  # (nSamples * nGridcells, 1)
-    # metas = np.zeros((obss_s.shape[0], 6))
+    if not(exp_config.num_meta_features == 0):
+        metas = np.reshape(np.asarray(metas), (obss_s.shape[0], -1))  # (nSamples * nGridcells, 1)
+        # metas = np.zeros((obss_s.shape[0], 6))
 
     
     # This definitely needs work
@@ -808,8 +812,9 @@ def gen_token(exp_config):
     idx_array, grid_features = load_hardware_snapshot(exp_config) # hardware snapshot + grid index 
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config) # (tr, cGridCell)
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config) # (tr, )
-    cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts = load_uncore_features_intel(exp_config)
-    mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
+    if not(exp_config.num_meta_features == 0):
+        cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts = load_uncore_features_intel(exp_config)
+        mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
     
     # print(idx_array.shape, grid_features.shape)
     # print(cfg_q.shape, query_throughput.shape)
@@ -828,11 +833,12 @@ def gen_token(exp_config):
     grid_features = scaler.fit_transform(grid_features)
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features+1))
 
-    mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
-    scaler_mc = StandardScaler()
-    mc_tput = scaler_mc.fit_transform(mc_tput)
-    mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
-    mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
+    if not(exp_config.num_meta_features == 0):
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
+        scaler_mc = StandardScaler()
+        mc_tput = scaler_mc.fit_transform(mc_tput)
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
+        mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
     
     orginal_max_tput_dset = find_correct_max_tput(exp_config) * 1.0
     
@@ -865,8 +871,9 @@ def gen_token(exp_config):
         act_ = load_actions(exp_config, cfg_)
         actions.append(act_)
 
-        # Load the meta mc_data
-        metas.append(mc_tput[_])
+        if not(exp_config.num_meta_features == 0):
+            # Load the meta mc_data
+            metas.append(mc_tput[_])
 
         
         # TODO: 
@@ -1019,8 +1026,9 @@ def gen_token(exp_config):
     print(done_idxs.shape)
     print(timesteps.shape)
     
-    metas = np.reshape(np.asarray(metas), (obss_s.shape[0], -1))  # (nSamples * nGridcells, 1)
-    # metas = np.zeros((obss_s.shape[0], 6))
+    if not(exp_config.num_meta_features == 0):
+        metas = np.reshape(np.asarray(metas), (obss_s.shape[0], -1))  # (nSamples * nGridcells, 1)
+        # metas = np.zeros((obss_s.shape[0], 6))
 
     
     # This definitely needs work

@@ -101,22 +101,46 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
+p="nvidia_gh_1s_1n"
+cd=(1,1)
+nf=-1
+nmf=0
+if p == "intel_skx_4s_8n":
+    cd = (8,12)
+    nf=15
+    nmf=16
+elif p == "amd_epyc7543_2s_8n":
+    cd = (4,16)
+    nf=12
+    nmf=0
+elif p == "nvidia_gh_1s_1n":
+    cd = (8,9)
+    nf=12
+    nmf=0
+elif p == "amd_epyc7543_2s_2n":
+    cd = (8,16)
+    nf=12
+    nmf=0
+    # "Needs to be updated"
+elif p == "intel_sb_4s_4n":
+    cd = (8,8)
+    nf=16
+    nmf=16
 
-
-exp_config = ExpConfig(processor="intel_skx_4s_8n", 
-                       chassis_dim=(12, 8), 
+exp_config = ExpConfig(processor=p, 
+                       chassis_dim=cd, 
                        index=db_index.BTREE.value,
                        workload=wl.SD_YCSB_WKLOADH.value,
-                       num_features=15, 
-                       num_meta_features=16, 
-                       cnt_grid_cells=100, 
+                       num_features=nf, 
+                       num_meta_features=nmf, 
+                       cnt_grid_cells=256, 
                        cfg_par=4, 
                        per_cfg_sample=7, # 5
-                       policy_dim = (10, 10), 
+                       policy_dim = (16, 16), 
                        rtg_scale=1.1,
                        rtg_div=100000,
                        eval_start_cfg=1,
-                       idx_kb_folder="kb_b"
+                       idx_kb_folder="kb_b__"
                        )
 print(exp_config)
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
@@ -142,7 +166,8 @@ print("done_idxs shape = ", done_idxs.shape)  # (100, ) => 256 * i => 256, 512, 
 print("rtgs shape = ", rtgs.shape)  # (records, )  => float
 
 print("timesteps shape = ", timesteps.shape)  # (records, )  => [0-255][0-255][0-255]
-print("meta_data shape = ", meta_data.shape)  # (records, 6)  => negative values
+if not(exp_config.num_meta_features) == 0:
+    print("meta_data shape = ", meta_data.shape)  # (records, 6)  => negative values
 
 print("benchmarks shape = ", benchmarks.shape)  # (records, 1)  => all 0s`
 print("stepwise_returns shape = ", stepwise_returns.shape)  # (records, 1)  => float
