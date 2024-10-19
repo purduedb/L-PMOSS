@@ -106,26 +106,48 @@ def load_uncore_features_intel(exp_config):
     cfg_par = exp_config.cfg_par 
     num_numa = exp_config.machine.numa_node
     num_mc_per_numa = exp_config.machine.mc_channel_per_numa
-    
+    num_socket = exp_config.machine.socket
+    num_upi_per_socket = exp_config.machine.num_upi_per_socket
     RAW_FILE = exp_config.kb_path + str(exp_config.machine.li_ncore_dumper[0]) + "/mem-channel_view.txt"
     raw_array = np.loadtxt(RAW_FILE)
-    read_channels = raw_array[:, cfg_par:cfg_par+num_numa*num_mc_per_numa]
-    write_channels = raw_array[:, cfg_par+num_numa*num_mc_per_numa:cfg_par+2*num_numa*num_mc_per_numa]
     
+    t1=cfg_par
+    t2=cfg_par+num_numa*num_mc_per_numa
+    read_channels = raw_array[:, t1:t2]
+    t1=t2
+    t2=cfg_par+2*num_numa*num_mc_per_numa
+    write_channels = raw_array[:, t1:t2]
+    t1=t2
+    t2=cfg_par+2*num_numa*num_mc_per_numa+num_socket*num_upi_per_socket
+    upi_channels_incoming = raw_array[:, t1:t2]
+    t1=t2
+    t2=cfg_par+2*num_numa*num_mc_per_numa+2*num_socket*num_upi_per_socket
+    upi_channels_outgoing = raw_array[:, t1:t2]
+    
+
     cfg = raw_array[:, :cfg_par]
 
     read_channels = np.reshape(read_channels, (read_channels.shape[0], num_numa, -1))
     write_channels = np.reshape(write_channels, (write_channels.shape[0], num_numa, -1))
+    upi_incoming = np.reshape(upi_channels_incoming, (upi_channels_incoming.shape[0], num_socket, -1))
+    upi_outgoing = np.reshape(upi_channels_outgoing, (upi_channels_outgoing.shape[0], num_socket, -1))
 
     read_channels_throughput_ts = np.sum(read_channels, axis=2)
     write_channels_throughput_ts = np.sum(write_channels, axis=2)
+    upi_incoming_throughput_ts = np.sum(upi_incoming, axis=2)
+    upi_outgoing_throughput_ts = np.sum(upi_outgoing, axis=2)
+
 
     read_channels_throughput_ts = np.reshape(read_channels_throughput_ts,
                                              (read_channels_throughput_ts.shape[0], num_numa, -1))
     write_channels_throughput_ts = np.reshape(write_channels_throughput_ts,
                                               (write_channels_throughput_ts.shape[0], num_numa, -1))
+    upi_incoming_throughput_ts = np.reshape(upi_incoming_throughput_ts,
+                                              (upi_incoming_throughput_ts.shape[0], num_socket, -1))
+    upi_outgoing_throughput_ts = np.reshape(upi_outgoing_throughput_ts,
+                                              (upi_outgoing_throughput_ts.shape[0], num_socket, -1))
 
-    return cfg, read_channels_throughput_ts, write_channels_throughput_ts
+    return cfg, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts
 
 
 def load_qtput_cum(exp_config):
@@ -607,9 +629,14 @@ def gen_token_for_eval(exp_config):
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
     if not(exp_config.num_meta_features == 0):
-        cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts = load_uncore_features_intel(exp_config)
+        cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
+        upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
         mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
-    
+        upi_tput = np.reshape(upi_tput, (upi_tput.shape[0], -1))
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))        
+        mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
+        
+
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
@@ -813,8 +840,14 @@ def gen_token(exp_config):
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config) # (tr, cGridCell)
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config) # (tr, )
     if not(exp_config.num_meta_features == 0):
-        cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts = load_uncore_features_intel(exp_config)
+        cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
+        upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
         mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
+        upi_tput = np.reshape(upi_tput, (upi_tput.shape[0], -1))
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))        
+        mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
+
+
     
     # print(idx_array.shape, grid_features.shape)
     # print(cfg_q.shape, query_throughput.shape)

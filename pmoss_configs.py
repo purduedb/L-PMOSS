@@ -16,6 +16,8 @@ class Machine:
     self.numa_node = hw_cfgs[0][0]
     self.worker_per_numa = hw_cfgs[0][1]
     self.mc_channel_per_numa = hw_cfgs[0][2]
+    self.socket = hw_cfgs[0][3]
+    self.num_upi_per_socket = hw_cfgs[0][4]
     self.num_worker = hw_cfgs[1][0] 
     self.li_ncore_dumper = hw_cfgs[2]
     self.li_worker = hw_cfgs[3]
