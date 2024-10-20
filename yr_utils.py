@@ -4,9 +4,8 @@ import torch
 import torch.nn.functional as F
 import pandas as pd
 np.set_printoptions(threshold=sys.maxsize)
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
 import copy
-
 
 def load_edge_index(cGridCell):
     if machine == 0:
@@ -71,33 +70,12 @@ def load_hardware_snapshot(exp_config):
     GRID_FEATURES = np.nan_to_num(GRID_FEATURES, neginf=0, nan=0, posinf=9999999999)
     grid_features = np.divide(GRID_FEATURES, grid_queries, out=np.zeros_like(GRID_FEATURES), where=grid_queries!=0)
     
+    # grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
+    # grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
+    # grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
+    # grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
+    # grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
     
-    grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
-    grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
-    grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
-    grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
-
-    # Turn it into a categorical variable
-    # gIdx = torch.from_numpy(grid_features_idx)
-    # grid_features_idx_one_hot = torch.zeros(gIdx.shape[0], 100)
-    # grid_features_idx_one_hot.scatter_(1, gIdx.unsqueeze(1), 1.0)
-    # grid_features_idx_one_hot = grid_features_idx_one_hot.view(1, grid_features_idx_one_hot.shape[0], grid_features_idx_one_hot.shape[1])
-    # grid_features_idx_one_hot = np.repeat(grid_features_idx_one_hot, grid_features.shape[0], axis=0)
-    # grid_features_idx_one_hot = np.reshape(grid_features_idx_one_hot, (grid_features.shape[0], exp_config.cnt_grid_cells, -1))
-
-    # t = torch.tensor(grid_features_idx, dtype=torch.int64)
-    # grid_features_idx_one_hot = F.one_hot(x=t, num_classes=exp_config.cnt_grid_cells)
-    # grid_features_idx_one_hot = grid_features_idx_one_hot.view(1, grid_features_idx_one_hot.shape[0],
-    #                                                            grid_features_idx_one_hot.shape[1])
-    # grid_features_idx_one_hot = np.repeat(grid_features_idx_one_hot, grid_features.shape[0], axis=0)
-    # grid_features_idx_one_hot = np.reshape(grid_features_idx_one_hot, (grid_features.shape[0], exp_config.cnt_grid_cells, -1))
-    # for _ in range(100):
-    #     print(grid_features_idx_one_hot[0][_])
-    
-    grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
-    # DF = pd.DataFrame(np.reshape(grid_features, (grid_features.shape[0], -1))) 
-    # DF.to_csv("data1.csv")
-    # grid_features = np.concatenate([grid_features, grid_features_idx_one_hot], axis=2)
     return cfgs_info, grid_features
 
 
@@ -638,9 +616,25 @@ def gen_token_for_eval(exp_config):
         
 
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    
+    """
+    For cleaning the data in amd processors, it's a bad practice but well
+    """
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+    refine = [244, 245, 246, 251]
+    for _ in refine:
+        grid_features[:, _, :] = 0.00001
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    """"""
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
-    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features+1))
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+
+    grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
+    grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
+    grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
+    grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
+    grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
 
     if not(exp_config.num_meta_features == 0):
         mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
@@ -839,6 +833,8 @@ def gen_token(exp_config):
     idx_array, grid_features = load_hardware_snapshot(exp_config) # hardware snapshot + grid index 
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config) # (tr, cGridCell)
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config) # (tr, )
+     
+
     if not(exp_config.num_meta_features == 0):
         cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
         upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
@@ -862,9 +858,29 @@ def gen_token(exp_config):
     
 
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    """
+    For cleaning the data in amd processors, it's a bad practice but well
+    """
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+    refine = [244, 245, 246, 251]
+    for _ in refine:
+        grid_features[:, _, :] = 0.00001
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    """"""
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
-    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features+1))
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+
+
+    grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
+    grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
+    grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
+    grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
+    grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
+    
+    # for _ in range(grid_features.shape[1]):
+    #     print(grid_features[0, _, :])
+    #     zz=input()
 
     if not(exp_config.num_meta_features == 0):
         mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))

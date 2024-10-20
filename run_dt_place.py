@@ -101,7 +101,7 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-p="intel_skx_4s_8n"
+p="amd_epyc7543_2s_8n"
 cd=(1,1)
 nf=-1
 nmf=0
@@ -110,7 +110,7 @@ if p == "intel_skx_4s_8n":
     nf=15
     nmf=24
 elif p == "amd_epyc7543_2s_8n":
-    cd = (4,16)
+    cd = (8,8)
     nf=12
     nmf=0
 elif p == "nvidia_gh_1s_1n":
@@ -118,7 +118,7 @@ elif p == "nvidia_gh_1s_1n":
     nf=12
     nmf=0
 elif p == "amd_epyc7543_2s_2n":
-    cd = (8,16)
+    cd = (8,8)
     nf=12
     nmf=0
     # "Needs to be updated"
@@ -146,6 +146,18 @@ print(exp_config)
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
     = gen_token(exp_config)
 
+# cut = int(obss.shape[0]*0.5)
+# obss = obss[:cut]
+# obss_s = obss_s[:cut]
+# obss_mask = obss_mask[:cut]
+# actions = actions[:cut]
+# stepwise_returns = stepwise_returns[:cut]
+# rtgs = rtgs[:cut]
+# done_idxs = done_idxs[:cut]
+# timesteps = timesteps[:cut]
+# meta_data = meta_data[:cut]
+# lengths = lengths[:cut]
+# benchmarks = benchmarks[:cut]
 # DF = pd.DataFrame(np.reshape(obss_s, (obss_s.shape[0], -1))[:1000]) 
 # DF.to_csv("data1.csv")
 
