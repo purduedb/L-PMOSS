@@ -101,7 +101,7 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-p="intel_skx_4s_8n"
+p="amd_epyc7543_2s_2n"
 cd=(1,1)
 nf=-1
 nmf=0

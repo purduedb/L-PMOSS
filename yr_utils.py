@@ -620,11 +620,12 @@ def gen_token_for_eval(exp_config):
     """
     For cleaning the data in amd processors, it's a bad practice but well
     """
-    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-    refine = [244, 245, 246, 251]
-    for _ in refine:
-        grid_features[:, _, :] = 0.00001
-    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [244, 245, 246, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
     """"""
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
@@ -858,14 +859,16 @@ def gen_token(exp_config):
     
 
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+
     """
     For cleaning the data in amd processors, it's a bad practice but well
     """
-    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-    refine = [244, 245, 246, 251]
-    for _ in refine:
-        grid_features[:, _, :] = 0.00001
-    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [244, 245, 246, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
     """"""
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
