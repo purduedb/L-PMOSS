@@ -1,3 +1,5 @@
 save_models/*
 kb/*
 kbs/*
+__pycache__/*
+mingpt/__pycache__/*
