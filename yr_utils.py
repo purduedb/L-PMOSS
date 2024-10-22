@@ -435,6 +435,52 @@ def load_actions(exp_config, cfg, onlyNUMA=False):
     return refined_configs
 
 
+def load_actions_hw_pos(exp_config, cfg, onlyNUMA=False):
+    
+    # 1. this should come from the machine, which are the worker threads and how they should be converted to 0 - num of workers
+    # 2. at the end there is this 10 * 10 division, you can change it to a square root division.
+    cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
+    gen_core_dict = {}
+    coreIdx = 0
+
+    for _ in exp_config.machine.li_worker:
+        gen_core_dict[_] = coreIdx
+        coreIdx += 1
+        
+    
+    refined_configs = []
+    cIdx = int(cfg)
+    
+    # TODO: Have the machine name and access name posssibly then add the config stuff
+    if exp_config.cnt_grid_cells == 100:
+        machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+    else:
+        machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    config = np.loadtxt(machine_config_path)
+    
+    
+    numa_core_div = exp_config.policy_dim[0]
+    config_numa = config[:numa_core_div, :]
+    config_core = config[numa_core_div:, :]
+
+    config_numa = np.reshape(config_numa, (config_numa.shape[0] * config_numa.shape[1],))
+    config_core = np.reshape(config_core, (config_core.shape[0] * config_core.shape[1],))
+
+    refined_config = np.empty_like(config_core)
+    for _ in range(config_core.shape[0]):
+        refined_config[_] = cores_position[int(gen_core_dict[config_core[_]])]
+
+    if onlyNUMA:
+        refined_configs.append(config_numa)
+    else:
+        refined_configs.append(refined_config)
+
+    refined_configs = np.asarray(refined_configs)
+    refined_configs = np.reshape(refined_config, (-1, ))
+    # refined_configs_li = refined_config.tolist()
+    
+    return refined_configs
+
 def retrieve_config(cfg, idx):
     if machine == 0:
         cntNUMANode = 8
@@ -1146,8 +1192,10 @@ def get_state(action, ts, exp_config):
     
     actions = []
     for _ in range(idx_array.shape[0]):
-        a_ = load_actions(exp_config, idx_array[_][0])
+        """These are hardware positions"""
+        a_ = load_actions_hw_pos(exp_config, idx_array[_][0])
         actions.append(a_)
+    
     actions = np.asarray(actions)
     
     eval_actions = actions[:, ts]
@@ -1197,25 +1245,14 @@ def env_update(
     
     cfg_ = exp_config.eval_start_cfg
     cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
-    # Load the actions (how many for each complete row? = no of grid cells)
+    """these are from 0-numworkers"""
     seen_act_ = load_actions(exp_config, cfg_)
-    # print(seen_act_)
-    # zz=input()
-    # a = int(cores_position[int(actions[i])])
-    # map_idx=exp_config.machine.li_worker.index(int(seen_act_[-1]))
-    # seen_a_ = exp_config.machine.worker_to_chassis_pos_mapping[map_idx]
+    """These are hardware positions"""
     seen_a_= int(cores_position[int(seen_act_[-1])])
     
-    obss = []
-    obss_s = []
-    obss_mask = []
-    stepwise_returns = []
+    
     rtgs = []
     metas = []
-    done_idxs = []
-    timesteps = []
-    
-    
     
     # Load the meta mc_data
     # metas.append(mc_tput[_])
@@ -1225,7 +1262,6 @@ def env_update(
     numa_machine_obs_s = current_x[-1][1:num_features+2, :, :].view(-1, chassis_dimx*chassis_dimy)
     numa_machine_obss_mask = current_x[-1][num_features+2, :, :].view(-1, )
     tg_return = torch.tensor([0])
-    
     # print(numa_machine_obs.shape, numa_machine_obs_s.shape, numa_machine_obss_mask.shape)
     # print(numa_machine_obs.view(chassis_dimx, chassis_dimy))
     # print(numa_machine_obs_s.view(exp_config.num_features+1, chassis_dimx, chassis_dimy)[-1])
@@ -1237,14 +1273,15 @@ def env_update(
     original_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale  # at this point the split_point has no effect
     max_tput_dset = original_max_tput_dset
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
+    
     a = int(actions[-1])
+    """By placing the [ith] grid cell, at the [a]th place in the machine
+    you take the grid feature of the ith cell currently,
+    i am just replacing the values, what happens if they have diff value or whether this is not possible at all
+    actions.append(a)
+    print(current_rtg)"""
     
-    # By placing the [ith] grid cell, at the [a]th place in the machine
-    # you take the grid feature of the ith cell currently,
-    # i am just replacing the values, what happens if they have diff value or whether this is not possible at all
-    # actions.append(a)
-    # print(current_rtg)
-    
+    """How does the state update?"""
     numa_machine_obs[int(a)] = True
     """If you want the view mask to be a counter rather than a binary matrix"""
     # numa_machine_obs[int(a)] += 1
