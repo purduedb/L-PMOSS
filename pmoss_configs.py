@@ -4,7 +4,8 @@ from enum import Enum
 class Machine:
   def __init__(self, name):
     self.name = name
-    file_hw = os.path.join("/home/yrayhan/works/lpmoss/machines/" + self.name + "/hw.cfg")    
+    current_folder = os.getcwd()
+    file_hw = os.path.join(current_folder + "/machines/" + self.name + "/hw.cfg")    
     hw_cfgs = []
     
     with open(file_hw, 'r') as f:
@@ -52,7 +53,8 @@ class ExpConfig:
 
         self.machine = Machine(self.processor)
         vendor, cpu = self.processor.split('_', 1)
-        self.kb_path = os.path.join("/home/yrayhan/works/lpmoss/kbs/" + 
+        current_folder = os.getcwd()
+        self.kb_path = os.path.join(current_folder + "/kbs/" + 
                                                vendor + "/" + cpu + "/" + 
                                                self.idx_kb_folder +"/"
                                                )    
