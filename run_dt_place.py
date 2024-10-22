@@ -101,7 +101,7 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-p="amd_epyc7543_2s_2n"
+p="amd_epyc7543_2s_8n"
 cd=(1,1)
 nf=-1
 nmf=0
@@ -130,7 +130,7 @@ elif p == "intel_sb_4s_4n":
 exp_config = ExpConfig(processor=p, 
                        chassis_dim=cd, 
                        index=db_index.BTREE.value,
-                       workload=wl.SD_YCSB_WKLOADH.value,
+                       workload=wl.SD_YCSB_WKLOADH11.value,
                        num_features=nf, 
                        num_meta_features=nmf, 
                        cnt_grid_cells=256, 
@@ -139,7 +139,7 @@ exp_config = ExpConfig(processor=p,
                        policy_dim = (16, 16), 
                        rtg_scale=1.1,
                        rtg_div=100000,
-                       eval_start_cfg=1,
+                       eval_start_cfg=30,
                        idx_kb_folder="kb_b__"
                        )
 print(exp_config)
@@ -244,7 +244,8 @@ mconf = GPTConfig(
 
 model = GPT(mconf, exp_config)
 model_path = None
-# model_path = "save_models/intel_skx_4s_8n/db_index.BTREE/db_index.BTREE2024-10-14-02-01-37-0.933.pkl" # rtree bar glife, lognormal
+model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-21-02-37-30-0.940.pkl" 
+print(model_path)
 
 if model_path is not None:
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))

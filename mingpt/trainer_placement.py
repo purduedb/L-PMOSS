@@ -227,18 +227,16 @@ class Trainer:
 					raise NotImplementedError()
 
 	
-	def get_returns(self, ret, test_dataset, is_single = False, benchmark = "adaptec1", 
-		is_shuffle_benchmark_id = False, is_all_macro = False):
-		
+	def get_returns(self, ret, test_dataset, is_shuffle_benchmark_id = False):
 		
 		loader = DataLoader(test_dataset, shuffle=True, pin_memory=True,
 					batch_size=self.config.batch_size,
 					num_workers=self.config.num_workers
 					)
 		
+		# The recent observation: the very last observation
 		pbar = enumerate(loader)
 		for it, (x, y, r, t, m_x, b, st, cir, l) in pbar:   
-			# print(x.shape, y.shape, r.shape, t.shape, m_x.shape, b.shape, st.shape, cir.shape, l.shape)
 			x = x.to(self.device)[0, -1, :]  # states: my=> (batch, context, 8*grid*grid)
 			m_x = m_x.to(self.device)[0, -1, :]  # meta: my=> (batch, context, 6)
 			y = y.to(self.device)[0, -1, :]  # action: my=> (batch, context, 1)
@@ -248,13 +246,13 @@ class Trainer:
 			st = st.to(self.device)[0, :, :, :]  # stepwise returns: my=> (batch, context, 1, 1)
 			cir = cir.to(self.device)[0]  # circuit: my=> (batch, 768)
 			l = l.to(self.device)[0]  # where to stop in a batch: my=> (batch, context)
-			
+		
+		print(x.shape, y.shape, r.shape, t.shape, m_x.shape, b.shape, st.shape, cir.shape, l.shape)
+		# zz=input()
 		self.model.train(False)
 		
 
 		benchmark_id = torch.tensor(0, dtype=torch.int64).reshape(1, 1)
-	
-
 		T_rewards, T_Qs = [], []
 		T_scores = []
 		done = True
@@ -265,26 +263,31 @@ class Trainer:
 		chassis_dimx = self.exp_config.chassis_dim[0]
 		chassis_dimy = self.exp_config.chassis_dim[1]
 		num_features = self.exp_config.num_features+1  # 1 to accound for grid index: 0, 1, 2, ...
-		
+		bound_core = int(self.exp_config.cnt_grid_cells / self.exp_config.machine.num_worker)+1
 		
 		print("// loop: repeat number ---------------------------------------------------------------------------")
 		# The very first observation:
 		# state, reward_sum, done, meta_state = env.reset()
 		state_obs = torch.tensor(np.full((1, chassis_dimx, chassis_dimy), False))
 		state_obs_s = torch.tensor(np.full((num_features, chassis_dimx, chassis_dimy), 0, dtype=np.float64))
-		
-		# state_obs_mask = torch.tensor(np.full((1, chassis_dimx, chassis_dimy), True))
-		
+
 		cores_position = self.exp_config.machine.worker_to_chassis_pos_mapping 
 		state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
+
 		obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
 		chassis_act_=[int(cores_position[int(z)]) for z in range(self.exp_config.machine.num_worker)]
-		obs_mask_core[np.array(chassis_act_).astype(int)] = 3
+		obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
+		
+		"""If you want to restrict the allocation to only worker cores"""
 		mask_already_full = obs_mask_core.nonzero()
 		state_obs_mask[mask_already_full] = True
+		# """If you want to balance the load across cpus:Do not pass the binary masks only"""
+		# state_obs_mask = obs_mask_core
+
 		state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
 		state_obs_mask = torch.tensor(state_obs_mask)
-
+		
+		# print(state_obs_mask)
 		state = torch.cat((state_obs, state_obs_s, state_obs_mask), 0).view(-1, chassis_dimx, chassis_dimy)
 
 		reward_sum = 0
@@ -306,9 +309,9 @@ class Trainer:
 		state = state.type(torch.float32).to(self.device).unsqueeze(0)
 		meta_state = meta_state.type(torch.float32).to(self.device).unsqueeze(0)
 		
-		rtgs = [ret]  # = [0]
-		rtgs[0] = r.view(-1, )[0]
-		# print(rtgs)
+		rtgs = [ret]  						# = [0]
+		rtgs[0] = r.view(-1, )[0]  			# you set this yourself, hence it comes pre-packaged from the test set where it is set to max
+		print("Desired Return = ", rtgs)
 		print(state.shape)
 		print(meta_state.shape)
 		
@@ -330,7 +333,6 @@ class Trainer:
 		all_states = state.type(torch.float32)
 		all_meta_states = meta_state.type(torch.float32)
 		actions = []
-		scores = []
 		print(all_states.shape, all_meta_states.shape)
 		
 		while True:
@@ -362,11 +364,12 @@ class Trainer:
 			reward = torch.tensor(rtgs)
 			
 			# zz = input()
-			state, reward, done, meta_state = env_update(
-				x, m_x, st, actions, 
-				state, meta_state, reward, self.exp_config, 
-				self.assuming_cfg_idx)
+			state, reward, done, meta_state, obs_mask_core = env_update(
+				x, m_x, st, 
+				actions, state, meta_state, reward, self.exp_config, 
+				self.assuming_cfg_idx, obs_mask_core)
 			
+			# print(state.shape, reward.shape, meta_state.shape)
 			# ours is the final format 
 			
 			# print(state.view(-1, 8, 8, 8)[:, 0, :, :])

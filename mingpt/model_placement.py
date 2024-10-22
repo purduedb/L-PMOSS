@@ -399,9 +399,11 @@ class GPT(nn.Module):
         
         # TODO: Double check if the mask indexing is correct or not!
         mask = states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 3+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
+        print(mask[-1,-1])
+        print(logits[-1,-1])
         logits = logits - 1.0e8 * mask        
-        # print(logits.shape)
-        
+        print(logits[-1,-1])
+        zz = input()
         
         # if we are given some desired targets also calculate the loss
         loss = None

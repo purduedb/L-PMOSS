@@ -159,7 +159,7 @@ def load_qtput_cum(exp_config):
     return idx_array, query_throughput
 
 
-def find_correct_max_tput_for_wl(wl, exp_config):
+def find_correct_max_tput_for_wl(exp_config):
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
     valid_tputs = []
     valid_idxs = []
@@ -169,7 +169,7 @@ def find_correct_max_tput_for_wl(wl, exp_config):
     for _ in range(query_throughput_numa.shape[0]):  # tr
         cfg_ = cfg_q2[0][_][0]
         wl_ = cfg_q2[0][_][2]
-        if wl_ == wl:
+        if wl_ == exp_config.workload:
             valid_tputs.append(query_throughput_numa[_])
             valid_cfgs.append(cfg_)
             valid_idxs.append(_)
@@ -180,7 +180,8 @@ def find_correct_max_tput_for_wl(wl, exp_config):
     
     maxCfg = valid_cfgs[mIdx]
     maxIdx = valid_idxs[mIdx]    
-    
+    print("MAXCONFIG =", maxCfg, "MAXIDX=", maxIdx)
+    print(max_tput)
     return max_tput
 
 
@@ -212,7 +213,8 @@ def find_correct_max_tput(exp_config):
     
     maxCfg = valid_cfgs[mIdx]
     maxIdx = valid_idxs[mIdx]    
-    
+    print("MAXCONFIG =", maxCfg, "MAXIDX=", maxIdx)
+    print(max_tput)
     return max_tput
 
 
@@ -645,7 +647,7 @@ def gen_token_for_eval(exp_config):
         mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
     
     orginal_max_tput_dset = find_correct_max_tput(exp_config) * exp_config.rtg_scale
-    # orginal_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale
+    orginal_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale
 
     obss = []
     obss_s = []
@@ -1096,39 +1098,38 @@ def gen_token(exp_config):
 def get_state(action, ts, exp_config):
     idx_array, grid_features = load_hardware_snapshot(exp_config)
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
-    
-    
-    # ranges = get_wkload_range('ycsb', 3, 6, '4S8N')
-    # ranges  = [(ranges[0][0], query_throughput.shape[0])]
-    # print(ranges)
-    # idx_array_tem = idx_array[ranges[0][0]-1: ranges[0][1], :]
-    # grid_features_tem = grid_features[ranges[0][0]-1: ranges[0][1], :, :]
-    # query_throughput_tem = query_throughput[ranges[0][0]-1: ranges[0][1], :]
-    # print(idx_array_tem.shape)
-    # for _ in range(1, len(ranges)):
-    #     idx_array_tem = np.concatenate([idx_array_tem, idx_array[ranges[_][0]-1: ranges[_][1], :]], axis=0)
-    #     grid_features_tem = np.concatenate([grid_features_tem, grid_features[ranges[_][0]-1: ranges[_][1], :]], axis=0)
-    #     query_throughput_tem = np.concatenate([query_throughput_tem, query_throughput[ranges[_][0]-1: ranges[_][1], :]], axis=0)
-    # (2492, 4) (2492, 100, 16) (2492, 100)
-    # idx_array = idx_array_tem
-    # grid_features = grid_features_tem
-    # query_throughput = query_throughput_tem
-    
+     
     refined_idx = np.where(idx_array[:, 2] == exp_config.workload)[0]
     idx_array = idx_array[refined_idx]
     grid_features = grid_features[refined_idx]
     query_throughput = query_throughput[refined_idx]
 
+    """
+    For cleaning the data in amd processors, it's a bad practice but well
+    """
+    if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [244, 245, 246, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    """"""
+
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
-    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features+1))
-
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+    
+    grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
+    grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
+    grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
+    grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
+    grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
+    
     actions = []
     for _ in range(idx_array.shape[0]):
         a_ = load_actions(exp_config, idx_array[_][0])
         actions.append(a_)
-    
     actions = np.asarray(actions)
     
     eval_actions = actions[:, ts]
@@ -1143,15 +1144,18 @@ def get_state(action, ts, exp_config):
     
     ret_query_tput = query_throughput[ret_idx[0]][:, ts]
     ret_query_tput = np.average(ret_query_tput, axis=0).item()
+    
+    print(ret_query_tput)
+    
     # ret_query_tput = torch.tensor(ret_query_tput)
     
     return ret_state, ret_query_tput
 
 
 def env_update(
-        x, m_x, st_return, actions, 
-        current_x, current_mx, current_rtg, exp_config, 
-        cfgIdx=41, board_formation=True, rtg_scale = 1.2
+        x, m_x, st_return, 
+        actions, current_x, current_mx, current_rtg, exp_config, 
+        cfgIdx, obs_mask_core
         ):
     
     """
@@ -1169,13 +1173,20 @@ def env_update(
     num_features = exp_config.num_features
     
     
-    
+    # These are the recent observations, 
     seen_obs = x.view(-1, chassis_dimx, chassis_dimy)
     seen_obss_s = seen_obs[1:num_features+2, :, :].view(-1, chassis_dimx*chassis_dimy)
     
-    # print(seen_obs.shape, seen_obss_s.shape, seen_st.shape)
-    
-    # seen_st = st  # st is un-normalized
+    cfg_ = exp_config.eval_start_cfg
+    cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
+    # Load the actions (how many for each complete row? = no of grid cells)
+    seen_act_ = load_actions(exp_config, cfg_)
+    # print(seen_act_)
+    # zz=input()
+    # a = int(cores_position[int(actions[i])])
+    # map_idx=exp_config.machine.li_worker.index(int(seen_act_[-1]))
+    # seen_a_ = exp_config.machine.worker_to_chassis_pos_mapping[map_idx]
+    seen_a_= int(cores_position[int(seen_act_[-1])])
     
     obss = []
     obss_s = []
@@ -1186,75 +1197,83 @@ def env_update(
     done_idxs = []
     timesteps = []
     
-    cfg_ = exp_config.eval_start_cfg
-    cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
-    
-    # Load the actions (how many for each complete row? = no of grid cells)
-    # This is the one you are currently seeing
-    seen_act_ = load_actions(exp_config, cfg_)
     
     
     # Load the meta mc_data
     # metas.append(mc_tput[_])
 
-    # TODO: This needs some serious thought
-    # print(current_x.shape, current_mx.shape, current_rtg.shape)
-    
+    # What you have accumulated so far
     numa_machine_obs = current_x[-1][0, :, :].view(-1, )
     numa_machine_obs_s = current_x[-1][1:num_features+2, :, :].view(-1, chassis_dimx*chassis_dimy)
-    numa_machine_obss_mask = current_x[-1][num_features+1, :, :].view(-1, )
+    numa_machine_obss_mask = current_x[-1][num_features+2, :, :].view(-1, )
     tg_return = torch.tensor([0])
     
-
     # print(numa_machine_obs.shape, numa_machine_obs_s.shape, numa_machine_obss_mask.shape)
-    
+    # print(numa_machine_obs.view(chassis_dimx, chassis_dimy))
+    # print(numa_machine_obs_s.view(exp_config.num_features+1, chassis_dimx, chassis_dimy)[-1])
+    print(obs_mask_core)
+    print(numa_machine_obss_mask.view(chassis_dimx, chassis_dimy))
+    # zz = input()
+
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
-    original_max_tput_dset = find_correct_max_tput(exp_config) * exp_config.rtg_scale  # at this point the split_point has no effect
+    original_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale  # at this point the split_point has no effect
     max_tput_dset = original_max_tput_dset
     cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
-    
-    # actions is what the model is predicting: MODEL
-    # seen_act_ is what we are currently observing as cfg_to_start
-    # if not board_formation:
-    #     a = int(actions[-1])
-    #     seen_a_= int(seen_act_[-1])
-    # else:
-    # we are assuming the model predicts the board position anyways
     a = int(actions[-1])
-    # a = int(cores_position[int(actions[i])])
-    # map_idx=exp_config.machine.li_worker.index(int(seen_act_[-1]))
-    # seen_a_ = exp_config.machine.worker_to_chassis_pos_mapping[map_idx]
-    seen_a_= int(cores_position[int(seen_act_[-1])])
     
-    
-        
-        
     # By placing the [ith] grid cell, at the [a]th place in the machine
     # you take the grid feature of the ith cell currently,
     # i am just replacing the values, what happens if they have diff value or whether this is not possible at all
     # actions.append(a)
     # print(current_rtg)
+    
     numa_machine_obs[int(a)] = True
+    """If you want the view mask to be a counter rather than a binary matrix"""
+    # numa_machine_obs[int(a)] += 1
+    """If you want the position mask to be a counter rather than a binary matrix"""
+    obs_mask_core[int(a)] -= 1
+
     o1, o2 = get_state(actions[-1], len(actions)-1, exp_config)
-
-    # => Added these for zero-shot learning on a different workload
-    # o1, o2 = torch.tensor([]), torch.tensor([])
-
+    
     if o1.shape[0] == 0:
         print("Not Located!")
-        numa_machine_obs_s[:, int(a)] = copy.deepcopy(seen_obss_s[:, seen_a_])
+        numa_machine_obs_s[:, int(a)] += copy.deepcopy(seen_obss_s[:, seen_a_])
         tg_return[0] = current_rtg[-1] - st_return[len(actions)-1]
     else:
         print("located")
-        numa_machine_obs_s[:, int(a)] = o1
+        numa_machine_obs_s[:, int(a)] += o1
         tg_return[0] = current_rtg[-1] - o2
 
          
     numa_machine_obs = numa_machine_obs.view(-1, chassis_dimx, chassis_dimy)
     numa_machine_obs_s = numa_machine_obs_s.view(-1, chassis_dimx, chassis_dimy)
+    
+    """If you want the position mask to be a counter rather than a binary matrix
+        and balance the load
+    """
+    curr_ts = len(actions)
+    print("TS = ", curr_ts)
+    if curr_ts >= exp_config.cnt_grid_cells/2:
+    # update the correct mask
+        bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
+        cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
+        state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
+        obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+        chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+        obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
+        mask_already_full = obs_mask_core.nonzero()
+        state_obs_mask[mask_already_full] = True
+        state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
+        state_obs_mask = torch.tensor(state_obs_mask)
+        numa_machine_obss_mask = state_obs_mask.view(-1, chassis_dimx, chassis_dimy)
+
+    state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
+    mask_already_full = np.where(obs_mask_core > 0)
+    state_obs_mask[mask_already_full] = True
+    state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
+    state_obs_mask = torch.tensor(state_obs_mask)
+    numa_machine_obss_mask = state_obs_mask.view(-1, chassis_dimx, chassis_dimy)
     numa_machine_obss_mask = numa_machine_obss_mask.view(-1, chassis_dimx, chassis_dimy)
-    
-    
     obs_state_new = torch.cat((numa_machine_obs, numa_machine_obs_s, numa_machine_obss_mask), dim=0).unsqueeze(0)
     
     # print(obs_state_new.shape)
@@ -1273,9 +1292,7 @@ def env_update(
     
     # print(metas.shape)
 
-
-
     done = False 
-    return obs_state, rtgs, done, metas
+    return obs_state, rtgs, done, metas, obs_mask_core
 
 

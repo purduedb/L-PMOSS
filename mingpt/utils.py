@@ -207,7 +207,7 @@ def infer_action(model, x, steps, exp_config, temperature=1.0, sample=False, top
     for k in range(steps):  # you always take a single step 
         print("===========")
         x_cond = x if x.size(1) <= block_size//3 else x[:, -block_size//3:] # crop context if needed
-        x_cond =x_cond.to(torch.float32)
+        x_cond = x_cond.to(torch.float32)
         
         print(x_cond.shape)
         
@@ -223,7 +223,6 @@ def infer_action(model, x, steps, exp_config, temperature=1.0, sample=False, top
         
         rtgs = rtgs if rtgs.size(1) <= block_size//3 else rtgs[:, -block_size//3:] # crop context if needed
         
-        # benchmark_id = int(benchmarks[0])
         
         # print(x_cond.shape)  # torch.Size([1, 1, 3, 84, 84])
         # print(actions)  # 1 
@@ -251,12 +250,13 @@ def infer_action(model, x, steps, exp_config, temperature=1.0, sample=False, top
         # mask = x_cond.reshape(x_cond.shape[0], x_cond.shape[1], 8, grid, grid)[:, -1, 7].reshape(x_cond.shape[0], grid * grid)
         
         mask = x_cond.reshape(x_cond.shape[0], x_cond.shape[1], 3+num_features, chassis_dimx, chassis_dimy)[:, -1, 3+num_features-1].reshape(x_cond.shape[0], chassis_dimx * chassis_dimy)
+        print(mask.shape, "This is where it counts")
+        print(mask)
         
-        # print(mask)
-        # print(mask.shape)  # torch.Size([1, 7056=grid*grid])
-        
+        print(logits)
         logits = logits - 1.0e8 * mask
-        
+        print(logits)
+        zz = input()
         # optionally crop probabilities to only the top k options
         if top_k is not None:
             logits = top_k_logits(logits, top_k)
