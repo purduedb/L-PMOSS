@@ -272,14 +272,14 @@ class Trainer:
 		state_obs_s = torch.tensor(np.full((num_features, chassis_dimx, chassis_dimy), 0, dtype=np.float64))
 
 		cores_position = self.exp_config.machine.worker_to_chassis_pos_mapping 
+		
 		state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
-
 		obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
 		chassis_act_=[int(cores_position[int(z)]) for z in range(self.exp_config.machine.num_worker)]
 		obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
 		
 		"""If you want to restrict the allocation to only worker cores"""
-		mask_already_full = obs_mask_core.nonzero()
+		mask_already_full = np.where(obs_mask_core==0)
 		state_obs_mask[mask_already_full] = True
 		# """If you want to balance the load across cpus:Do not pass the binary masks only"""
 		# state_obs_mask = obs_mask_core

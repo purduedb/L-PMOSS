@@ -658,7 +658,8 @@ def gen_token_for_eval(exp_config):
     done_idxs = []
     timesteps = []
     metas = []
-    
+    actions_ = []
+
     cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
 
     num_numa = exp_config.machine.numa_node
@@ -683,9 +684,10 @@ def gen_token_for_eval(exp_config):
             # Load the meta mc_data
             metas.append(mc_tput[_])
 
-        # TODO: This needs some serious thought
-        # obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 3)
-
+        
+        """Update the obss mask: mask should be where you should not put
+            Which one to off? 
+        """
         numa_machine_obs = np.full((chassis_dimx * chassis_dimy, ), False)
         numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+1), 0, dtype=np.float64)
         # numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), True)
@@ -694,7 +696,7 @@ def gen_token_for_eval(exp_config):
         obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
         chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
         obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
-        mask_already_full = obs_mask_core.nonzero()
+        mask_already_full = np.where(obs_mask_core==0)
         numa_machine_obss_mask[mask_already_full] = True
 
 
@@ -713,11 +715,13 @@ def gen_token_for_eval(exp_config):
         # print(query_throughput_numa[_])
 
         flag = False 
+        actions_individual = np.zeros_like(act_)
         for i in range(act_.shape[0]):  # each timestep 
             # map_idx=exp_config.machine.li_worker.index(int(act_[i]))
             # a = exp_config.machine.worker_to_chassis_pos_mapping[map_idx]
             a = int(cores_position[int(act_[i])])
-        
+            actions_individual[i] = a
+
             # => Add this if condition so that i can place stuff again
             # if i > 32:
             #     obs_mask_core = np.full((num_numa * num_worker_per_numa, ), 2)
@@ -729,8 +733,14 @@ def gen_token_for_eval(exp_config):
             # mask_already_full = obs_mask_core.nonzero()
             # numa_machine_obss_mask[mask_already_full] = True
 
+            """Update the obss mask: mask should be where you should not put
+                Which one to off? 
+            """
             numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
-            mask_already_full = obs_mask_core.nonzero()
+            obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+            chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+            obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
+            mask_already_full = np.where(obs_mask_core==0)
             numa_machine_obss_mask[mask_already_full] = True
 
             st_return[i] = query_throughput[_][i]
@@ -762,7 +772,7 @@ def gen_token_for_eval(exp_config):
         # print(st_return)
         # print("=======================")
         # actions.append(-1)
-        
+        actions_.append(actions_individual)
         
 
         done_idxs.append((_+1) * i)
@@ -794,6 +804,8 @@ def gen_token_for_eval(exp_config):
     # print(done_idxs.shape)
     # print(timesteps.shape)
     
+    """Send the positions in the hardware, because this is what we actually do the prediction on"""
+    actions_ = np.reshape(np.asarray(actions_), (-1, ))  # (nsamples * ngridcells, 1)
     actions = np.reshape(np.asarray(actions), (-1, ))  # (nsamples * ngridcells, 1)
     # (nSamples * (nGridcells+1 = initial observation = 0s), num_numa,num_worker_per_numa)
     obss = np.reshape(np.asarray(obss), (-1, 1, chassis_dimx, chassis_dimy))
@@ -826,7 +838,8 @@ def gen_token_for_eval(exp_config):
     lengths = np.full((obss_s.shape[0], 1), exp_config.cnt_grid_cells)  # it should be actually the number of valid actions until which timestep
     benchmarks = np.zeros((obss_s.shape[0], 1))
     
-    return obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, metas, lengths, benchmarks
+    '''Sedning actions_ instead of actions'''
+    return obss, obss_s, obss_mask, actions_, stepwise_returns, rtgs, done_idxs, timesteps, metas, lengths, benchmarks
 
 
 
@@ -905,10 +918,10 @@ def gen_token(exp_config):
     done_idxs = []
     timesteps = []
     metas = []
-    
+    actions_ = []
     num_numa = exp_config.machine.numa_node
     num_worker_per_numa = exp_config.machine.worker_per_numa
-    lbound_core = 2 # 100 / 56
+    lbound_core = 6 # 100 / 56
     lbound_numa = 13 # 100/8
     chassis_dimx = exp_config.chassis_dim[0]
     chassis_dimy = exp_config.chassis_dim[1]
@@ -938,17 +951,21 @@ def gen_token(exp_config):
 
         numa_machine_obs = np.full((chassis_dimx * chassis_dimy, ), False)
         numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+1), 0, dtype=np.float64)
-        numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), True)
-        obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 3)
+        """Update the obss mask: mask should be where you should not put
+            Which one to off? 
+        """
+        # numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), True)  # it should be false
+        
+        # obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 3)
         # obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
         # obs_mask_core[np.array(act_).astype(int)] = 1
         
-        # numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
-        # obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
-        # chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
-        # obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
-        # mask_already_full = obs_mask_core.nonzero()
-        # numa_machine_obss_mask[mask_already_full] = True
+        numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
+        obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+        chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+        obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
+        mask_already_full = np.where(obs_mask_core==0)
+        numa_machine_obss_mask[mask_already_full] = True
         
 
         st_return = np.full((act_.shape[0], ), 0)
@@ -965,29 +982,24 @@ def gen_token(exp_config):
         
         flag = False 
         i=0
+        actions_individual = np.zeros_like(act_)
         for i in range(act_.shape[0]):  # each timestep 
             # since we already refine it to 0 - 63, we do not need it
             # map_idx=exp_config.machine.li_worker.index(int(act_[i]))
             # a = exp_config.machine.worker_to_chassis_pos_mapping[map_idx]
             
             a = int(cores_position[int(act_[i])])
-                
+            actions_individual[i] = a
             
-            # => Add this if condition so that i can place stuff again
-            # if i > 32:
-            #     obs_mask_core = np.full((num_numa * num_worker_per_numa, ), 2)
-            
-            # if i > 50 and not(flag):  # For obs_mask_core = [2+1]
-            #     obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
-            #     chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
-            #     obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
-            #     flag = True
-
-                        
+            """Update the obss mask: mask should be where you should not put
+            Which one to off? 
+            """
             numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
-            mask_already_full = obs_mask_core.nonzero()
+            obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+            chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+            obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
+            mask_already_full = np.where(obs_mask_core==0)
             numa_machine_obss_mask[mask_already_full] = True
-            
 
             st_return[i] = query_throughput[_][i]
             # tg_return[0] should be the max value and equal across
@@ -1024,7 +1036,7 @@ def gen_token(exp_config):
         # print(st_return)
         # print("=======================")
         # actions.append(-1)
-        
+        actions_.append(actions_individual)
         
         done_idxs.append((_+1) * i)
         rtgs.append(copy.deepcopy(tg_return[:exp_config.cnt_grid_cells]))  # parameterize it 
@@ -1055,7 +1067,12 @@ def gen_token(exp_config):
     # print(done_idxs.shape)
     # print(timesteps.shape)
     
+    """Send the positions in the hardware, because this is what we actually do the prediction on"""
+    actions_ = np.reshape(np.asarray(actions_), (-1, ))  # (nsamples * ngridcells, 1)
     actions = np.reshape(np.asarray(actions), (-1, ))  # (nsamples * ngridcells, 1)
+    # print(actions_.shape, actions.shape)
+    # zz = input()
+
     # (nSamples * (nGridcells+1 = initial observation = 0s), num_numa,num_worker_per_numa)
     obss = np.reshape(np.asarray(obss), (-1, 1, chassis_dimx, chassis_dimy))
     # (nSamples * (nGridcells+1 = initial observation = 0s), num_numa, num_worker_per_numa, exp_config.num_features)
@@ -1089,7 +1106,8 @@ def gen_token(exp_config):
     lengths = np.full((obss_s.shape[0], 1), exp_config.cnt_grid_cells)  # it should be actually the number of valid actions until which timestep
     benchmarks = np.zeros((obss_s.shape[0], 1))
     
-    return obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, metas, lengths, benchmarks
+    '''Sedning actions_ instead of actions'''
+    return obss, obss_s, obss_mask, actions_, stepwise_returns, rtgs, done_idxs, timesteps, metas, lengths, benchmarks
 
 
 
@@ -1251,24 +1269,24 @@ def env_update(
     """If you want the position mask to be a counter rather than a binary matrix
         and balance the load
     """
-    curr_ts = len(actions)
-    print("TS = ", curr_ts)
-    if curr_ts >= exp_config.cnt_grid_cells/2:
-    # update the correct mask
-        bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
-        cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
-        state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
-        obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
-        chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
-        obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
-        mask_already_full = obs_mask_core.nonzero()
-        state_obs_mask[mask_already_full] = True
-        state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
-        state_obs_mask = torch.tensor(state_obs_mask)
-        numa_machine_obss_mask = state_obs_mask.view(-1, chassis_dimx, chassis_dimy)
+    # curr_ts = len(actions)
+    # print("TS = ", curr_ts)
+    # if curr_ts >= exp_config.cnt_grid_cells/2:
+    # # update the correct mask
+    #     bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
+    #     cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
+    #     state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
+    #     obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+    #     chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+    #     obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
+    #     mask_already_full = obs_mask_core.nonzero()
+    #     state_obs_mask[mask_already_full] = True
+    #     state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
+    #     state_obs_mask = torch.tensor(state_obs_mask)
+    #     numa_machine_obss_mask = state_obs_mask.view(-1, chassis_dimx, chassis_dimy)
 
     state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
-    mask_already_full = np.where(obs_mask_core > 0)
+    mask_already_full = np.where(obs_mask_core == 0)
     state_obs_mask[mask_already_full] = True
     state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
     state_obs_mask = torch.tensor(state_obs_mask)

@@ -399,11 +399,11 @@ class GPT(nn.Module):
         
         # TODO: Double check if the mask indexing is correct or not!
         mask = states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 3+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
-        print(mask[-1,-1])
-        print(logits[-1,-1])
+        # print(mask[-1,-1])
+        # print(logits[-1,-1])
         logits = logits - 1.0e8 * mask        
-        print(logits[-1,-1])
-        zz = input()
+        # print(logits[-1,-1])
+        # zz = input()
         
         # if we are given some desired targets also calculate the loss
         loss = None
@@ -411,10 +411,9 @@ class GPT(nn.Module):
         if targets is not None:
             lengths = lengths.reshape(states.shape[0], states.shape[1] , 1)  # (batch, context, 1)
             targets_tmp = torch.where(lengths == 1, targets, -1)  # (batch, context, 1)
-            
-
             loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets_tmp.reshape(-1), ignore_index = -1)
-
+            # print(logits.reshape(-1, logits.size(-1)), targets_tmp.reshape(-1))
+            # zz = input()
             _, res = torch.max(logits.reshape(-1, logits.size(-1)), dim=1)
             # my=>
             # tem = res.view(-1, 100)

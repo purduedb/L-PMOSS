@@ -257,6 +257,7 @@ def infer_action(model, x, steps, exp_config, temperature=1.0, sample=False, top
         logits = logits - 1.0e8 * mask
         print(logits)
         zz = input()
+        
         # optionally crop probabilities to only the top k options
         if top_k is not None:
             logits = top_k_logits(logits, top_k)

@@ -244,7 +244,7 @@ mconf = GPTConfig(
 
 model = GPT(mconf, exp_config)
 model_path = None
-model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-21-02-37-30-0.940.pkl" 
+# model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-21-02-37-30-0.940.pkl" 
 print(model_path)
 
 if model_path is not None:
