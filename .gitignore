@@ -3,3 +3,4 @@ kb/*
 kbs/*
 __pycache__/*
 mingpt/__pycache__/*
+*.pyc
