@@ -27,6 +27,11 @@ parser.add_argument('--is_eval_only', action='store_true')
 parser.add_argument('--test_all_macro', action='store_true')
 parser.add_argument('--start_cfg', type=int, default=30)
 parser.add_argument('--rtg', type=float, default=1.2)
+
+parser.add_argument('--wl', type=int, default=-1)
+parser.add_argument('--ecfg', type=int, default=-1)
+parser.add_argument('--sidx', type=int, default=-1)
+
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
@@ -127,10 +132,14 @@ elif p == "intel_sb_4s_4n":
     nf=16
     nmf=16
 
+workload = args.wl
+eval_start_cfg = args.ecfg
+save_idx = args.sidx
 exp_config = ExpConfig(processor=p, 
                        chassis_dim=cd, 
                        index=db_index.BTREE.value,
-                       workload=wl.SD_YCSB_WKLOADH11.value,
+                    #    workload=wl.SD_YCSB_WKLOADA.value,
+                       workload=workload,
                        num_features=nf, 
                        num_meta_features=nmf, 
                        cnt_grid_cells=256, 
@@ -139,8 +148,11 @@ exp_config = ExpConfig(processor=p,
                        policy_dim = (16, 16), 
                        rtg_scale=1.1,
                        rtg_div=100000,
-                       eval_start_cfg=30,
-                       idx_kb_folder="kb_b__"
+                    #    eval_start_cfg=11,
+                        eval_start_cfg=eval_start_cfg,
+                       idx_kb_folder="kb_b__",
+                       save_idx = save_idx,
+                    #    save_idx = 201
                        )
 print(exp_config)
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
@@ -244,7 +256,7 @@ mconf = GPTConfig(
 
 model = GPT(mconf, exp_config)
 model_path = None
-model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-22-21-11-38-0.929.pkl"
+model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-23-07-27-55-0.949.pkl"
 print(model_path)
 
 if model_path is not None:
