@@ -35,7 +35,7 @@ class Machine:
 class ExpConfig:
     def __init__(self, processor, chassis_dim, index, workload, num_features, num_meta_features,
                  cnt_grid_cells, cfg_par, per_cfg_sample, policy_dim, 
-                 rtg_scale, rtg_div, eval_start_cfg, idx_kb_folder):
+                 rtg_scale, rtg_div, eval_start_cfg, idx_kb_folder, save_idx):
         self.processor = processor
         self.chassis_dim = chassis_dim  # A tuple (x, y)
         self.index = index  # The name of the index used in the experiment
@@ -57,7 +57,8 @@ class ExpConfig:
         self.kb_path = os.path.join(current_folder + "/kbs/" + 
                                                vendor + "/" + cpu + "/" + 
                                                self.idx_kb_folder +"/"
-                                               )    
+                                               )
+        self.save_idx = save_idx    
         
 
 
