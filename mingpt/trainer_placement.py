@@ -184,7 +184,7 @@ class Trainer:
 				level /= 100.0
 				actions = self.get_returns(level, self.test_dataset)
 				"""actions here are hw positions of the workers"""
-				retrieve_config(self.exp_config, actions, 200)
+				retrieve_config(self.exp_config, actions, self.exp_config.save_idx)
 				print("REFINE ACTION")
 				
 			print("=====================ALL DONE!=====================")

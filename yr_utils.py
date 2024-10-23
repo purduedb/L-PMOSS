@@ -389,7 +389,7 @@ def load_frozen_cell_embeddings():
     return emb
 
 
-def load_actions(exp_config, cfg, onlyNUMA=False):
+def load_actions(exp_config, cfg, wl, onlyNUMA=False):
     
     # 1. this should come from the machine, which are the worker threads and how they should be converted to 0 - num of workers
     # 2. at the end there is this 10 * 10 division, you can change it to a square root division.
@@ -406,10 +406,18 @@ def load_actions(exp_config, cfg, onlyNUMA=False):
     cIdx = int(cfg)
     
     # TODO: Have the machine name and access name posssibly then add the config stuff
-    if exp_config.cnt_grid_cells == 100:
-        machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+    
+    if cIdx >= 200:
+        if exp_config.cnt_grid_cells == 100:
+            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + ".txt"
+        else:
+            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
     else:
-        machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+        if exp_config.cnt_grid_cells == 100:
+            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+        else:
+            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    
     config = np.loadtxt(machine_config_path)
     
     
@@ -436,7 +444,7 @@ def load_actions(exp_config, cfg, onlyNUMA=False):
     return refined_configs
 
 
-def load_actions_hw_pos(exp_config, cfg, onlyNUMA=False):
+def load_actions_hw_pos(exp_config, cfg, wl, onlyNUMA=False):
     
     # 1. this should come from the machine, which are the worker threads and how they should be converted to 0 - num of workers
     # 2. at the end there is this 10 * 10 division, you can change it to a square root division.
@@ -453,10 +461,18 @@ def load_actions_hw_pos(exp_config, cfg, onlyNUMA=False):
     cIdx = int(cfg)
     
     # TODO: Have the machine name and access name posssibly then add the config stuff
-    if exp_config.cnt_grid_cells == 100:
-        machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+    if cIdx >= 200:
+        if exp_config.cnt_grid_cells == 100:
+            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + ".txt"
+        else:
+            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
     else:
-        machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+        if exp_config.cnt_grid_cells == 100:
+            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+        else:
+            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    
+    
     config = np.loadtxt(machine_config_path)
     
     
@@ -628,7 +644,7 @@ def gen_token_for_eval(exp_config):
             continue
         
         # Load the actions (how many for each complete row? = no of grid cells)
-        act_ = load_actions(exp_config, cfg_)
+        act_ = load_actions(exp_config, cfg_, wl_)
         actions.append(act_)
 
         if not(exp_config.num_meta_features == 0):
@@ -884,9 +900,10 @@ def gen_token(exp_config):
     
     for _ in range(idx_array.shape[0]):  # tr
         cfg_ = idx_array[_][0]
+        wl_ = idx_array[_][2]
         # print(cfg_)
         # Load the actions (how many for each complete row? = no of grid cells)
-        act_ = load_actions(exp_config, cfg_)
+        act_ = load_actions(exp_config, cfg_, wl_)
         actions.append(act_)
 
         if not(exp_config.num_meta_features == 0):
@@ -1098,7 +1115,7 @@ def get_state(action, ts, exp_config):
     actions = []
     for _ in range(idx_array.shape[0]):
         """These are hardware positions"""
-        a_ = load_actions_hw_pos(exp_config, idx_array[_][0])
+        a_ = load_actions_hw_pos(exp_config, idx_array[_][0], idx_array[_][2])
         actions.append(a_)
     
     actions = np.asarray(actions)
@@ -1151,7 +1168,7 @@ def env_update(
     cfg_ = exp_config.eval_start_cfg
     cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
     """these are from 0-numworkers"""
-    seen_act_ = load_actions(exp_config, cfg_)
+    seen_act_ = load_actions(exp_config, cfg_, exp_config.workload)
     """These are hardware positions"""
     seen_a_= int(cores_position[int(seen_act_[-1])])
     
