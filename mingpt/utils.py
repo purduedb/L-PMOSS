@@ -250,13 +250,13 @@ def infer_action(model, x, steps, exp_config, temperature=1.0, sample=False, top
         # mask = x_cond.reshape(x_cond.shape[0], x_cond.shape[1], 8, grid, grid)[:, -1, 7].reshape(x_cond.shape[0], grid * grid)
         
         mask = x_cond.reshape(x_cond.shape[0], x_cond.shape[1], 3+num_features, chassis_dimx, chassis_dimy)[:, -1, 3+num_features-1].reshape(x_cond.shape[0], chassis_dimx * chassis_dimy)
-        print(mask.shape, "This is where it counts")
-        print(mask)
+        # print(mask.shape, "This is where it counts")
+        # print(mask)
         
-        print(logits)
+        # print(logits)
         logits = logits - 1.0e8 * mask
-        print(logits)
-        zz = input()
+        # print(logits)
+        # zz = input()
         
         # optionally crop probabilities to only the top k options
         if top_k is not None:

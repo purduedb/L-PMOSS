@@ -183,13 +183,10 @@ class Trainer:
 				print("//------------------------------------------------")
 				level /= 100.0
 				actions = self.get_returns(level, self.test_dataset)
-
+				"""actions here are hw positions of the workers"""
+				retrieve_config(self.exp_config, actions, 200)
 				print("REFINE ACTION")
-				refined_actions = []
-				for a_ in actions:
-					machine_wrkr=self.exp_config.machine.li_worker[int(a_)]
-					refined_actions.append(machine_wrkr)
-				print(refined_actions)
+				
 			print("=====================ALL DONE!=====================")
 			return 
 

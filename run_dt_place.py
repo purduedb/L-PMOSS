@@ -244,7 +244,7 @@ mconf = GPTConfig(
 
 model = GPT(mconf, exp_config)
 model_path = None
-# model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-21-02-37-30-0.940.pkl" 
+model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-22-21-11-38-0.929.pkl"
 print(model_path)
 
 if model_path is not None:
@@ -261,7 +261,7 @@ get_parameter_number(model)
 # initialize a trainer instance and kick off training
 epochs = args.epochs
 # => Changed here
-args.is_eval_only = False
+args.is_eval_only = True
 
 tconf = TrainerConfig(
     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,

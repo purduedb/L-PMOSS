@@ -6,6 +6,7 @@ import pandas as pd
 np.set_printoptions(threshold=sys.maxsize)
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
 import copy
+import os 
 
 def load_edge_index(cGridCell):
     if machine == 0:
@@ -481,130 +482,34 @@ def load_actions_hw_pos(exp_config, cfg, onlyNUMA=False):
     
     return refined_configs
 
-def retrieve_config(cfg, idx):
-    if machine == 0:
-        cntNUMANode = 8
-        cntCorePerNUMA = 8
-        nGridCell = 10
-    if machine == 1:
-        cntNUMANode = 2
-        cntCorePerNUMA = 40
-        nGridCell = 10
 
-    thread_range_indexed = [
-        _ for _ in range(0, cntNUMANode*cntCorePerNUMA)
-    ]
-    if machine == 0:
-        thread_range_original = [
-            [_ for _ in range(5, 13)],
-            [_ for _ in range(17, 25)],
-            [_ for _ in range(29, 37)],
-            [_ for _ in range(41, 49)],
-            [_ for _ in range(53, 61)],
-            [_ for _ in range(65, 73)],
-            [_ for _ in range(77, 85)],
-            [_ for _ in range(89, 97)]
-        ]
-    else:
-        thread_range_original = [
-            [_ for _ in range(6, 86, 2)],
-            [_ for _ in range(7, 87, 2)]
-        ]
 
-    gen_core_dict = {}
-    gen_numa_dict = {}
-    coreIdx = 0
-    if machine == 0:    
-        for _ in range(len(thread_range_indexed)):
-            idx_core = int(thread_range_indexed[_])
-            numa_node = (int) (idx_core / cntNUMANode)
-            numa_core = (int) (idx_core % cntCorePerNUMA)
-            gen_core_dict[idx_core] = thread_range_original[numa_node][numa_core]
-            gen_numa_dict[idx_core] = numa_node
-    else:
-        t = 0
-        for _ in range(len(thread_range_indexed)):
-            if _ < 40: 
-                gen_numa_dict[_] = 0
-                gen_core_dict[_] = _*2 + 6
-            
-            else:
-                
-                gen_numa_dict[_] = 1
-                gen_core_dict[_] = t*2 + 6 + 1
-                t += 1
+def retrieve_config(exp_config, out_actions, cfg_idx):
+    hw_chassis = exp_config.machine.worker_to_chassis_pos_mapping
+    hw_workers = exp_config.machine.li_worker
+    num_numa = exp_config.machine.numa_node
+    numa_nodes = []
+    workers = []
+    for a_ in out_actions:
+        worker_index = hw_chassis.index(a_)
+        workers.append(hw_workers[worker_index])
+        numa_nodes.append(worker_index%num_numa)
     
-    # config_numa = np.reshape(config_numa, (config_numa.shape[0] * config_numa.shape[1],))
-    # config_core = np.reshape(nGridCell, (config_core.shape[0] * config_core.shape[1],))
-    if machine == 0:
-        retrieved_configs_core = [_ for _ in range(0, nGridCell*nGridCell)]
-        for _ in range(len(cfg)):
-            retrieved_configs_core[_] = gen_core_dict[cfg[_]]
+    
+    numa_nodes = np.asarray(numa_nodes)
+    workers = np.asarray(workers)
 
-        retrieved_configs_numa = [_ for _ in range(0, nGridCell*nGridCell)]
-        for _ in range(len(cfg)):
-            retrieved_configs_numa[_] = gen_numa_dict[cfg[_]]
-        
-        retrieved_configs_core = np.asarray(retrieved_configs_core)
-        retrieved_configs_core = np.reshape(retrieved_configs_core, (nGridCell, nGridCell))
-
-        retrieved_configs_numa = np.asarray(retrieved_configs_numa)
-        retrieved_configs_numa = np.reshape(retrieved_configs_numa, (nGridCell, nGridCell))
-
-        retrieved_configs = np.vstack((retrieved_configs_numa, retrieved_configs_core))
-        retrieved_configs = retrieved_configs.astype(int)
-        
-        np.savetxt("l-machine-configs/config_" + str(idx) + ".txt", retrieved_configs, fmt='%i')
-    else:
-        retrieved_configs_core = [_ for _ in range(0, nGridCell*nGridCell)]
-        for _ in range(len(cfg)):
-            retrieved_configs_core[_] = gen_core_dict[cfg[_]]
-
-        retrieved_configs_numa = [_ for _ in range(0, nGridCell*nGridCell)]
-        for _ in range(len(cfg)):
-            retrieved_configs_numa[_] = gen_numa_dict[cfg[_]]
-        
-        retrieved_configs_core = np.asarray(retrieved_configs_core)
-        retrieved_configs_core = np.reshape(retrieved_configs_core, (nGridCell*nGridCell))
-
-        retrieved_configs_numa = np.asarray(retrieved_configs_numa)
-        retrieved_configs_numa = np.reshape(retrieved_configs_numa, (nGridCell*nGridCell))
-
-        retrieved_configs = np.vstack((retrieved_configs_numa, retrieved_configs_core))
-        retrieved_configs = retrieved_configs.astype(int)
-        
-        retrieved_configs = np.reshape(retrieved_configs, (nGridCell*2, nGridCell))
-        np.savetxt("l-machine-configs/config_" + str(idx) + ".txt", retrieved_configs, fmt='%i')
+    retrieved_configs_numa = np.reshape(numa_nodes, (exp_config.policy_dim[0], exp_config.policy_dim[1]))
+    retrieved_configs_core = np.reshape(workers, (exp_config.policy_dim[0], exp_config.policy_dim[1]))
+    retrieved_configs = np.vstack((retrieved_configs_numa, retrieved_configs_core))
+    retrieved_configs = retrieved_configs.astype(int)
+    
+    save_cfg_dir = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(exp_config.workload)
+    os.makedirs(save_cfg_dir, exist_ok=True)
+    cfg_file = save_cfg_dir + "/c_" + str(cfg_idx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    np.savetxt(cfg_file, retrieved_configs, fmt='%i')
     return retrieved_configs
 
-# osm, quadtree, uni-scan, 4S8N
-# li1 = [58, 52, 18, 5, 56, 16, 9, 42, 30, 34, 40, 46, 0, 37, 60, 51, 2, 22, 25, 26, 43, 50, 62, 57, 6, 3, 21, 31, 14, 55, 38, 24, 49, 8, 29, 13, 53, 39, 15, 59, 1, 61, 47, 35, 20, 41, 32, 44, 4, 10, 54, 36, 48, 11, 28, 12, 23, 7, 63, 17, 19, 33, 27, 45, 39, 15, 39, 20, 32, 29, 5, 24, 38, 46, 21, 5, 51, 38, 37, 12, 27, 49, 12, 19, 21, 0, 12, 49, 22, 56, 46, 14, 63, 30, 56, 26, 56, 29, 44, 6]
-# retrieve_config(li1, 300010)  # 40
-# li1 = [0, 6, 8, 16, 12, 2, 13, 20, 30, 14, 28, 33, 41, 17, 37, 43, 50, 62, 4, 53, 58, 10, 21, 51, 56, 44, 45, 46, 27, 5, 11, 9, 52, 42, 61, 24, 40, 22, 54, 48, 19, 38, 29, 35, 26, 3, 49, 59, 57, 34, 39, 23, 1, 47, 55, 32, 18, 25, 15, 31, 36, 60, 7, 63, 51, 5, 12, 24, 49, 45, 22, 19, 22, 33, 40, 20, 13, 20, 46, 12, 27, 50, 42, 26, 21, 0, 19, 9, 15, 6, 7, 62, 63, 30, 56, 32, 59, 49, 44, 6]
-# retrieve_config(li1, 300020)  # 30
-# # glife, quadtree, uni-scan, 4S8N
-# li3 = [0, 6, 8, 16, 12, 2, 13, 20, 30, 14, 28, 33, 41, 17, 50, 62, 51, 56, 5, 24, 44, 43, 48, 58, 49, 27, 21, 52, 53, 57, 34, 61, 18, 59, 54, 36, 60, 35, 45, 42, 46, 19, 29, 1, 40, 4, 38, 3, 9, 63, 32, 23, 25, 11, 22, 26, 37, 39, 15, 31, 55, 47, 7, 10, 51, 32, 29, 24, 49, 45, 17, 19, 22, 24, 44, 61, 13, 20, 46, 12, 27, 50, 42, 19, 21, 0, 19, 9, 15, 6, 7, 62, 63, 30, 46, 25, 59, 29, 44, 6]
-# retrieve_config(li3, 300011)  # 40
-# bmod02, quadtree, uni-scan, 4S8N
-# li2 = [58, 52, 18, 5, 56, 16, 9, 42, 30, 34, 40, 46, 0, 37, 60, 51, 2, 22, 25, 26, 43, 50, 62, 57, 6, 3, 21, 31, 14, 55, 38, 24, 49, 27, 54, 61, 35, 45, 1, 59, 53, 39, 47, 28, 41, 32, 29, 44, 7, 15, 20, 36, 8, 63, 4, 13, 12, 48, 23, 10, 19, 11, 17, 33, 39, 39, 39, 39, 55, 15, 39, 55, 39, 55, 55, 15, 22, 15, 15, 20, 15, 32, 5, 46, 5, 38, 37, 9, 56, 6, 46, 62, 3, 50, 46, 56, 42, 27, 6, 42]
-# retrieve_config(li2, 300020)  # 40
-# li2 = [58, 52, 18, 5, 56, 16, 9, 42, 30, 34, 40, 46, 0, 37, 60, 51, 2, 22, 25, 26, 43, 50, 54, 62, 57, 6, 3, 21, 14, 31, 35, 32, 38, 27, 12, 49, 61, 24, 28, 44, 8, 41, 29, 45, 23, 55, 39, 15, 47, 7, 20, 36, 4, 13, 48, 53, 59, 63, 1, 10, 11, 33, 17, 19, 0, 4, 39, 39, 49, 12, 39, 47, 39, 47, 55, 55, 39, 39, 55, 55, 55, 55, 32, 19, 21, 29, 24, 22, 32, 5, 0, 26, 38, 30, 49, 42, 56, 12, 19, 6]
-# [58, 52, 18, 5, 56, 16, 9, 42, 30, 34, 40, 46, 0, 37, 60, 51, 2, 22, 25, 26, 43, 50, 54, 62, 57, 6, 3, 21, 14, 31, 35, 32, 38, 27, 12, 49, 61, 24, 28, 44, 8, 41, 29, 45, 23, 55, 39, 15, 47, 7, 20, 36, 4, 13, 48, 53, 59, 63, 1, 10, 11, 33, 17, 19, 0, 4, 39, 39, 49, 12, 39, 47, 39, 47, 55, 55, 39, 39, 55, 55, 55, 55, 32, 19, 21, 29, 24, 22, 32, 5, 0, 26, 38, 30, 49, 42, 56, 12, 19, 6]
-# retrieve_config(li2, 300022)  # 30
-# li_ = [31, 48, 4, 42, 57, 43, 5, 6, 0, 1, 2, 3, 44, 46, 45, 29, 34, 61, 7, 23, 40, 15, 41, 70, 49, 33, 39, 27, 50, 11, 13, 60, 24, 35, 25, 59, 78, 32, 14, 22, 36, 18, 53, 52, 12, 76, 64, 38, 10, 47, 55, 56, 58, 37, 68, 73, 65, 66, 28, 21, 72, 8, 77, 51, 62, 26, 75, 54, 69, 9, 67, 19, 71, 20, 16, 63, 17, 74, 30, 79, 12, 29, 38, 7, 1, 45, 69, 29, 39, 54, 24, 22, 18, 33, 17, 7, 23, 42, 18, 47]
-# li_ = [31, 48, 4, 42, 57, 43, 5, 6, 0, 1, 2, 3, 44, 45, 46, 40, 41, 61, 64, 47, 8, 58, 79, 70, 28, 11, 23, 27, 14, 7, 13, 60, 29, 35, 49, 15, 20, 39, 25, 21, 12, 69, 59, 33, 56, 55, 34, 10, 71, 53, 73, 63, 18, 62, 67, 36, 65, 9, 72, 19, 51, 16, 26, 38, 76, 22, 68, 54, 32, 66, 50, 37, 17, 78, 52, 77, 24, 74, 30, 75, 12, 29, 38, 7, 1, 45, 5, 29, 39, 54, 24, 22, 18, 33, 17, 7, 23, 42, 18, 47]
-# retrieve_config(li_, 10000000)  # 30
-# li = [33, 56, 54, 18, 5, 59, 17, 48, 4, 21, 40, 53, 42, 30, 9, 34, 57, 46, 41, 22, 27, 52, 25, 37, 26, 44, 51, 62, 43, 35, 6, 49, 60, 3, 10, 2, 36, 8, 32, 58, 1, 19, 38, 24, 61, 12, 0, 45, 20, 50, 28, 29, 47, 16, 63, 11, 23, 39, 14, 13, 15, 55, 31, 7, 27, 35, 6, 63, 30, 9, 44, 35, 6, 9, 34, 61, 44, 6, 46, 25, 34, 59, 44, 20, 44, 6, 19, 9, 15, 6, 7, 62, 30, 14, 9, 9, 44, 44, 44, 6]
-# lice = [31, 48, 4, 42, 57, 43, 5, 6, 0, 1, 2, 3, 44, 45, 46, 40, 41, 61, 64, 47, 8, 58, 79, 70, 28, 11, 23, 27, 14, 7, 13, 60, 29, 35, 49, 20, 39, 25, 21, 12, 69, 59, 33, 56, 55, 34, 10, 71, 53, 63, 18, 62, 67, 36, 65, 9, 72, 19, 51, 16, 26, 38, 76, 22, 68, 54, 32, 66, 37, 17, 78, 24, 73, 15, 52, 77, 50, 74, 30, 75, 12, 29, 38, 7, 1, 45, 5, 29, 39, 54, 24, 22, 18, 33, 17, 7, 23, 42, 18, 47]
-# retrieve_config(lice, 9990)  # 40
-# li = [47, 28, 45, 53, 17, 11, 60, 52, 1, 2, 44, 18, 58, 59, 3, 12, 10, 33, 19, 6, 30, 43, 54, 0, 9, 36, 42, 37, 40, 38, 27, 25, 56, 48, 61, 35, 62, 4, 13, 41, 24, 32, 46, 49, 16, 22, 50, 5, 14, 20, 51, 26, 57, 21, 8, 29, 34, 39, 23, 63, 15, 7, 31, 55, 31, 15, 15, 31, 63, 31, 15, 15, 15, 55, 55, 63, 51, 51, 15, 31, 31, 15, 31, 55, 15, 31, 31, 15, 15, 31, 7, 31, 31, 31, 31, 25, 51, 32, 44, 6]
-# retrieve_config(li, 500000)  # 41
-# li = [47, 28, 45, 53, 17, 11, 60, 52, 1, 2, 44, 18, 58, 59, 3, 12, 10, 33, 19, 6, 30, 43, 54, 0, 9, 36, 42, 37, 40, 38, 27, 25, 56, 48, 61, 35, 62, 4, 13, 41, 24, 32, 46, 49, 16, 22, 50, 5, 14, 20, 51, 26, 57, 21, 8, 29, 34, 39, 23, 15, 63, 55, 7, 31, 63, 15, 15, 31, 63, 63, 15, 51, 31, 55, 55, 55, 15, 31, 15, 55, 55, 15, 31, 51, 32, 0, 19, 9, 15, 6, 24, 62, 63, 30, 46, 25, 59, 29, 44, 6]
-li = [57, 2, 3, 0, 17, 9, 8, 5, 10, 18, 24, 12, 28, 32, 42, 21, 26, 35, 46, 52, 62, 6, 53, 44, 36, 49, 58, 56, 60, 4, 13, 19, 45, 34, 61, 22, 40, 41, 48, 11, 25, 43, 14, 33, 20, 47, 29, 55, 16, 38, 27, 37, 1, 59, 50, 51, 54, 30, 15, 63, 23, 7, 31, 39, 34, 4, 17, 40, 48, 58, 45, 56, 60, 49, 34, 41, 43, 59, 33, 22, 27, 38, 1, 12, 45, 52, 53, 37, 13, 20, 18, 25, 43, 50, 35, 57, 38, 29, 41, 21]
-li = [47, 0, 2, 13, 21, 5, 12, 4, 14, 28, 30, 34, 42, 29, 6, 11, 10, 22, 24, 32, 33, 40, 53, 44, 51, 61, 56, 18, 43, 50, 60, 3, 58, 1, 9, 19, 20, 35, 45, 49, 36, 37, 17, 26, 25, 41, 54, 59, 38, 46, 27, 52, 62, 57, 8, 48, 16, 39, 15, 55, 63, 23, 31, 7, 51, 28, 29, 14, 60, 45, 17, 19, 22, 44, 44, 61, 13, 20, 46, 58, 27, 9, 47, 47, 21, 49, 19, 9, 15, 35, 7, 38, 38, 36, 46, 25, 59, 29, 44, 6]
-li = [3, 6, 14, 19, 26, 33, 44, 49, 62, 57, 13, 4, 18, 25, 32, 46, 53, 56, 34, 43, 54, 36, 0, 27, 51, 58, 41, 10, 21, 28, 29, 1, 48, 61, 2, 38, 12, 59, 40, 42, 50, 60, 5, 30, 16, 37, 45, 52, 17, 20, 24, 63, 8, 22, 9, 35, 15, 11, 23, 31, 55, 47, 7, 39, 63, 34, 34, 0, 36, 46, 57, 63, 25, 60, 33, 5, 13, 20, 26, 27, 43, 36, 53, 48, 57, 4, 13, 22, 27, 38, 35, 27, 45, 52, 56, 53, 10, 16, 26, 38]
-li = [3, 6, 14, 19, 26, 33, 44, 49, 62, 57, 13, 4, 18, 25, 32, 46, 53, 56, 34, 43, 54, 36, 51, 58, 27, 38, 1, 11, 28, 5, 12, 48, 40, 20, 59, 41, 60, 0, 10, 22, 29, 30, 45, 63, 37, 61, 24, 42, 35, 50, 21, 17, 8, 55, 39, 7, 15, 47, 31, 52, 9, 23, 16, 2, 51, 32, 0, 11, 54, 33, 28, 14, 57, 58, 12, 27, 38, 18, 34, 27, 43, 35, 46, 61, 6, 24, 61, 44, 49, 36, 25, 6, 10, 13, 60, 20, 8, 29, 30, 41]
-# retrieve_config(li, -7)  # 41
 
 def sth(cfg_idx):
     # cfg = np.loadtxt("machine_configs/config_" + str(cfg_idx) + ".txt")[10:]
