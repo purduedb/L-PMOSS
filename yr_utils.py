@@ -1133,7 +1133,7 @@ def get_state(action, ts, exp_config):
     ret_query_tput = query_throughput[ret_idx[0]][:, ts]
     ret_query_tput = np.average(ret_query_tput, axis=0).item()
     
-    print(ret_query_tput)
+    # print(ret_query_tput)
     
     # ret_query_tput = torch.tensor(ret_query_tput)
     
@@ -1188,7 +1188,7 @@ def env_update(
     # print(numa_machine_obs.view(chassis_dimx, chassis_dimy))
     # print(numa_machine_obs_s.view(exp_config.num_features+1, chassis_dimx, chassis_dimy)[-1])
     print(obs_mask_core)
-    print(numa_machine_obss_mask.view(chassis_dimx, chassis_dimy))
+    # print(numa_machine_obss_mask.view(chassis_dimx, chassis_dimy))
     # zz = input()
 
     cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
@@ -1228,22 +1228,15 @@ def env_update(
     """If you want the position mask to be a counter rather than a binary matrix
         and balance the load
     """
-    # curr_ts = len(actions)
+    curr_ts = len(actions)
     # print("TS = ", curr_ts)
-    # if curr_ts >= exp_config.cnt_grid_cells/2:
-    # # update the correct mask
-    #     bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
-    #     cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
-    #     state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
-    #     obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
-    #     chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
-    #     obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
-    #     mask_already_full = obs_mask_core.nonzero()
-    #     state_obs_mask[mask_already_full] = True
-    #     state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
-    #     state_obs_mask = torch.tensor(state_obs_mask)
-    #     numa_machine_obss_mask = state_obs_mask.view(-1, chassis_dimx, chassis_dimy)
-
+    if curr_ts >= exp_config.cnt_grid_cells/2:
+        bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
+        cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
+        obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+        chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+        obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
+        
     state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
     mask_already_full = np.where(obs_mask_core == 0)
     state_obs_mask[mask_already_full] = True

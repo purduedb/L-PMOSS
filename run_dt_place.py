@@ -26,20 +26,22 @@ parser.add_argument('--cuda', type=str, default='1,2,3')
 parser.add_argument('--is_eval_only', action='store_true')
 parser.add_argument('--test_all_macro', action='store_true')
 parser.add_argument('--start_cfg', type=int, default=30)
-parser.add_argument('--rtg', type=float, default=1.2)
+parser.add_argument('--rtg', type=float, default=1.1)
 
-parser.add_argument('--wl', type=int, default=-1)
-parser.add_argument('--ecfg', type=int, default=-1)
-parser.add_argument('--sidx', type=int, default=-1)
+parser.add_argument('--wl', type=int, default=11)
+parser.add_argument('--ecfg', type=int, default=30)
+parser.add_argument('--sidx', type=int, default=1)
+parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
+parser.add_argument('--mpath', type=str, default="save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 
 set_seed(args.seed)
-seq_len = args.context_length       # total number of grids
-rtg_scale = args.rtg                # e.g., 1.1, 1.2, ...
-cfg_to_start_with = args.start_cfg  # necessary for inference (recent snaps)
+# seq_len = args.context_length       # total number of grids
+# rtg_scale = args.rtg                # e.g., 1.1, 1.2, ...
+# cfg_to_start_with = args.start_cfg  # necessary for inference (recent snaps)
 
 
 class StateActionReturnDataset(Dataset):
@@ -106,7 +108,9 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-p="amd_epyc7543_2s_8n"
+
+p=args.p
+model_path = args.mpath
 cd=(1,1)
 nf=-1
 nmf=0
@@ -135,6 +139,9 @@ elif p == "intel_sb_4s_4n":
 workload = args.wl
 eval_start_cfg = args.ecfg
 save_idx = args.sidx
+rtg_scale = args.rtg
+cfg_to_start_with = args.ecfg
+
 exp_config = ExpConfig(processor=p, 
                        chassis_dim=cd, 
                        index=db_index.BTREE.value,
@@ -146,7 +153,7 @@ exp_config = ExpConfig(processor=p,
                        cfg_par=4, 
                        per_cfg_sample=7, # 5
                        policy_dim = (16, 16), 
-                       rtg_scale=1.1,
+                       rtg_scale=rtg_scale,
                        rtg_div=100000,
                     #    eval_start_cfg=11,
                         eval_start_cfg=eval_start_cfg,
@@ -255,9 +262,9 @@ mconf = GPTConfig(
     model_type="reward_conditioned", max_timestep=max(timesteps))
 
 model = GPT(mconf, exp_config)
-model_path = None
-model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-23-07-27-55-0.949.pkl"
-print(model_path)
+# model_path = None
+# model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-23-07-27-55-0.949.pkl"
+# print(model_path)
 
 if model_path is not None:
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
@@ -273,7 +280,7 @@ get_parameter_number(model)
 # initialize a trainer instance and kick off training
 epochs = args.epochs
 # => Changed here
-args.is_eval_only = True
+args.is_eval_only = False
 
 tconf = TrainerConfig(
     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,

@@ -352,10 +352,7 @@ class Trainer:
 			# update the state and every other stuff now that you have seen the action
 			# state, reward, done, meta_state = env.step(action)
 			print("------------------------------------------------------------")
-			"""We are doing this in a very naive manner
-				x, m_x and st is getting value from above
-				let's do this correct way
-			"""
+			
 			# state, reward, done, meta_state = my_env_step(x, m_x, r, actions, self.assuming_cfg_idx)
 			# state, reward, done, meta_state = my_env_step_new(x, m_x, st, actions, self.assuming_cfg_idx)
 			reward = torch.tensor(rtgs)
