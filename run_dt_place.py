@@ -24,6 +24,7 @@ parser.add_argument('--epochs', type=int, default=10000)
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--cuda', type=str, default='1,2,3')
 parser.add_argument('--is_eval_only', action='store_true')
+parser.add_argument('--no_eval_only', action='store_false')
 parser.add_argument('--test_all_macro', action='store_true')
 parser.add_argument('--start_cfg', type=int, default=30)
 parser.add_argument('--rtg', type=float, default=1.1)
@@ -108,6 +109,7 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
+# args.is_eval_only = False
 
 p=args.p
 model_path = args.mpath
@@ -135,6 +137,7 @@ elif p == "intel_sb_4s_4n":
     cd = (8,8)
     nf=16
     nmf=16
+
 
 workload = args.wl
 eval_start_cfg = args.ecfg
@@ -279,8 +282,8 @@ get_parameter_number(model)
 
 # initialize a trainer instance and kick off training
 epochs = args.epochs
-# => Changed here
-args.is_eval_only = False
+
+
 
 tconf = TrainerConfig(
     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
