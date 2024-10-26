@@ -289,7 +289,9 @@ class Trainer:
 
 		reward_sum = 0
 		done = False 
-		meta_state = torch.zeros_like(m_x)
+		
+		# meta_state = torch.zeros_like(m_x)
+		meta_state = m_x
 		
 		# print(state.shape)
 		# print(reward_sum)
