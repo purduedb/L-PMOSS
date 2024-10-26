@@ -1140,6 +1140,87 @@ def get_state(action, ts, exp_config):
     return ret_state, ret_query_tput
 
 
+def get_state_up(action, ts, exp_config):
+    idx_array, grid_features = load_hardware_snapshot(exp_config)
+    cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
+    if not(exp_config.num_meta_features == 0):
+        cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
+        upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
+        mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
+        upi_tput = np.reshape(upi_tput, (upi_tput.shape[0], -1))
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))        
+        mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
+
+
+    """
+    For cleaning the data in amd processors, it's a bad practice but well
+    """
+    if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [244, 245, 246, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    """"""
+
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    scaler = StandardScaler()
+    grid_features = scaler.fit_transform(grid_features)
+    grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+    
+    grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
+    grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
+    grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
+    grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
+    grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
+
+    if not(exp_config.num_meta_features == 0):
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
+        scaler_mc = StandardScaler()
+        mc_tput = scaler_mc.fit_transform(mc_tput)
+        mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
+        mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
+
+
+    refined_idx = np.where(idx_array[:, 2] == exp_config.workload)[0]
+    idx_array = idx_array[refined_idx]
+    grid_features = grid_features[refined_idx]
+    query_throughput = query_throughput[refined_idx]
+    mc_tput = mc_tput[refined_idx]
+    
+    actions = []
+    for _ in range(idx_array.shape[0]):
+        """These are hardware positions"""
+        a_ = load_actions_hw_pos(exp_config, idx_array[_][0], idx_array[_][2])
+        actions.append(a_)
+    
+    actions = np.asarray(actions)
+    
+    eval_actions = actions[:, ts]
+
+    ret_idx = np.where(eval_actions == action)    
+    if ret_idx[0].shape[0] == 0:
+        return torch.tensor([]), torch.tensor([]), torch.tensor([])
+
+    ret_state = grid_features[ret_idx[0]][:, ts, :]
+    ret_state = np.average(ret_state, axis=0)
+    ret_state = torch.tensor(ret_state)
+    
+    ret_query_tput = query_throughput[ret_idx[0]][:, ts]
+    ret_query_tput = np.average(ret_query_tput, axis=0).item()
+    
+    ret_meta_state = mc_tput[ret_idx[0]][:, ts, :]
+    ret_meta_state = np.average(ret_meta_state, axis=0)
+    ret_meta_state = torch.tensor(ret_meta_state, dtype=torch.float32)
+    print(ret_meta_state.dtype)
+    # print(ret_query_tput)
+    
+    # ret_query_tput = torch.tensor(ret_query_tput)
+    print(ret_state.shape, ret_meta_state.shape)
+    
+    return ret_state, ret_query_tput, ret_meta_state
+
+
 def env_update(
         x, m_x, st_return, 
         actions, current_x, current_mx, current_rtg, exp_config, 
@@ -1210,7 +1291,10 @@ def env_update(
     """If you want the position mask to be a counter rather than a binary matrix"""
     obs_mask_core[int(a)] -= 1
 
-    o1, o2 = get_state(actions[-1], len(actions)-1, exp_config)
+    if not(exp_config.num_meta_features == 0):
+        o1, o2, o3 = get_state_up(actions[-1], len(actions)-1, exp_config)
+    else:
+        o1, o2 = get_state(actions[-1], len(actions)-1, exp_config)
     
     if o1.shape[0] == 0:
         print("Not Located!")
@@ -1257,9 +1341,22 @@ def env_update(
     
     # print(reward.shape)
     
-    mx = current_mx[-1].unsqueeze(0)
-    metas = torch.cat((current_mx, mx), dim=0)
-    
+    if not(exp_config.num_meta_features == 0):
+        if o1.shape[0] == 0:
+            print(m_x.shape, current_mx.shape)
+            mx = m_x.unsqueeze(0)
+            print(m_x.shape, current_mx.shape)
+            metas = torch.cat((current_mx, mx), dim=0)
+        else:
+            mx = o3.unsqueeze(0)
+            print(mx.shape, current_mx.shape)
+            metas = torch.cat((current_mx, mx), dim=0)
+    else:
+        mx = current_mx[-1].unsqueeze(0)
+        print(mx.shape, current_mx.shape)
+        metas = torch.cat((current_mx, mx), dim=0)
+
+
     # print(metas.shape)
 
     done = False 
