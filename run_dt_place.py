@@ -135,7 +135,7 @@ elif p == "amd_epyc7543_2s_2n":
     # "Needs to be updated"
 elif p == "intel_sb_4s_4n":
     cd = (8,8)
-    nf=16
+    nf=15
     nmf=16
 
 
