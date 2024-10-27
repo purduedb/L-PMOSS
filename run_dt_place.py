@@ -120,6 +120,10 @@ if p == "intel_skx_4s_8n":
     cd = (8,12)
     nf=15
     nmf=24  # 16 + 8 
+elif p == "intel_skx_4s_4n":
+    cd = (8,12)
+    nf=15
+    nmf=24  # 16 + 8 
 elif p == "amd_epyc7543_2s_8n":
     cd = (8,8)
     nf=12
@@ -165,7 +169,8 @@ exp_config = ExpConfig(processor=p,
                     #    save_idx = 201
                        )
 
-unseen_machine = Machine("intel_skx_4s_4n")
+unseen_machine = Machine(p)
+# unseen_machine = Machine("intel_skx_4s_4n")
 
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
     = gen_token(exp_config)

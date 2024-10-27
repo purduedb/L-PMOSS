@@ -186,6 +186,8 @@ class Trainer:
 				level /= 100.0
 				actions = self.get_returns(level, self.test_dataset)
 				"""actions here are hw positions of the workers"""
+				if self.unseen_machine.name == "intel_skx_4s_4n":
+					self.unseen_machine.numa_node = 4
 				retrieve_config(self.exp_config, actions, self.exp_config.save_idx, self.unseen_machine)
 				print("REFINE ACTION")
 				
