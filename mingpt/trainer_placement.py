@@ -14,11 +14,12 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from mingpt.utils import infer_action
 from yr_utils import *
-
+from pmoss_configs import *
 
 logger = logging.getLogger(__name__)
 seq_len = 256
-
+"""==================================================================================================="""
+"""Put the unseen machine here"""
 
 
 strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
@@ -45,7 +46,7 @@ class TrainerConfig:
             setattr(self, k, v)
 
 class Trainer:
-	def __init__(self, model, train_dataset, test_dataset, config, assuming_cfg_idx, exp_config):
+	def __init__(self, model, train_dataset, test_dataset, config, assuming_cfg_idx, exp_config, unseen_machine):
 		self.model = model
 		self.train_dataset = train_dataset
 		self.test_dataset = test_dataset
@@ -57,6 +58,7 @@ class Trainer:
 		self.best_loss = 9999999999999
 		self.assuming_cfg_idx = assuming_cfg_idx
 		self.exp_config = exp_config
+		self.unseen_machine = unseen_machine
 		strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 		
 		self.device = 'cpu'
@@ -184,7 +186,7 @@ class Trainer:
 				level /= 100.0
 				actions = self.get_returns(level, self.test_dataset)
 				"""actions here are hw positions of the workers"""
-				retrieve_config(self.exp_config, actions, self.exp_config.save_idx)
+				retrieve_config(self.exp_config, actions, self.exp_config.save_idx, self.unseen_machine)
 				print("REFINE ACTION")
 				
 			print("=====================ALL DONE!=====================")
@@ -260,19 +262,21 @@ class Trainer:
 		chassis_dimx = self.exp_config.chassis_dim[0]
 		chassis_dimy = self.exp_config.chassis_dim[1]
 		num_features = self.exp_config.num_features+1  # 1 to accound for grid index: 0, 1, 2, ...
-		bound_core = int(self.exp_config.cnt_grid_cells / self.exp_config.machine.num_worker)+1
 		
+		bound_core = int(self.exp_config.cnt_grid_cells / self.unseen_machine.num_worker)+1
+		
+
 		print("// loop: repeat number ---------------------------------------------------------------------------")
 		# The very first observation:
 		# state, reward_sum, done, meta_state = env.reset()
 		state_obs = torch.tensor(np.full((1, chassis_dimx, chassis_dimy), False))
 		state_obs_s = torch.tensor(np.full((num_features, chassis_dimx, chassis_dimy), 0, dtype=np.float64))
 
-		cores_position = self.exp_config.machine.worker_to_chassis_pos_mapping 
+		cores_position = self.unseen_machine.worker_to_chassis_pos_mapping 
 		
 		state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
 		obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
-		chassis_act_=[int(cores_position[int(z)]) for z in range(self.exp_config.machine.num_worker)]
+		chassis_act_=[int(cores_position[int(z)]) for z in range(self.unseen_machine.num_worker)]
 		obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
 		
 		"""If you want to restrict the allocation to only worker cores"""
@@ -363,7 +367,7 @@ class Trainer:
 			state, reward, done, meta_state, obs_mask_core = env_update(
 				x, m_x, st, 
 				actions, state, meta_state, reward, self.exp_config, 
-				self.assuming_cfg_idx, obs_mask_core)
+				self.assuming_cfg_idx, obs_mask_core, self.unseen_machine)
 			
 			# print(state.shape, reward.shape, meta_state.shape)
 			# ours is the final format 

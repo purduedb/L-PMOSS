@@ -500,10 +500,10 @@ def load_actions_hw_pos(exp_config, cfg, wl, onlyNUMA=False):
 
 
 
-def retrieve_config(exp_config, out_actions, cfg_idx):
-    hw_chassis = exp_config.machine.worker_to_chassis_pos_mapping
-    hw_workers = exp_config.machine.li_worker
-    num_numa = exp_config.machine.numa_node
+def retrieve_config(exp_config, out_actions, cfg_idx, unseen_machine):
+    hw_chassis = unseen_machine.worker_to_chassis_pos_mapping
+    hw_workers = unseen_machine.li_worker
+    num_numa = unseen_machine.numa_node
     numa_nodes = []
     workers = []
     for a_ in out_actions:
@@ -520,7 +520,7 @@ def retrieve_config(exp_config, out_actions, cfg_idx):
     retrieved_configs = np.vstack((retrieved_configs_numa, retrieved_configs_core))
     retrieved_configs = retrieved_configs.astype(int)
     
-    save_cfg_dir = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(exp_config.workload)
+    save_cfg_dir = "./pmoss_machine_configs/" + unseen_machine.name + "/" + str(exp_config.workload)
     os.makedirs(save_cfg_dir, exist_ok=True)
     cfg_file = save_cfg_dir + "/c_" + str(cfg_idx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
     np.savetxt(cfg_file, retrieved_configs, fmt='%i')
@@ -1224,7 +1224,7 @@ def get_state_up(action, ts, exp_config):
 def env_update(
         x, m_x, st_return, 
         actions, current_x, current_mx, current_rtg, exp_config, 
-        cfgIdx, obs_mask_core
+        cfgIdx, obs_mask_core, unseen_machine
         ):
     
     """

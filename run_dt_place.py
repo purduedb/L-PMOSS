@@ -164,7 +164,9 @@ exp_config = ExpConfig(processor=p,
                        save_idx = save_idx,
                     #    save_idx = 201
                        )
-print(exp_config)
+
+unseen_machine = Machine("intel_skx_4s_4n")
+
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
     = gen_token(exp_config)
 
@@ -189,23 +191,23 @@ obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, time
     = gen_token_for_eval(exp_config)
 
 print("============================================================================================================")
-print("create dataset finish.")
-print("obss shape = ", obss.shape)  # (records, 1, grid, grid) => False, true
-print("obss_wire shape = ", obss_s.shape)  # (records, 1, grid, grid)  => float
-print("obss_mask shape = ", obss_mask.shape)  # (records, 1, grid, grid)  => True, false
+# print("create dataset finish.")
+# print("obss shape = ", obss.shape)  # (records, 1, grid, grid) => False, true
+# print("obss_wire shape = ", obss_s.shape)  # (records, 1, grid, grid)  => float
+# print("obss_mask shape = ", obss_mask.shape)  # (records, 1, grid, grid)  => True, false
 
-print("actions shape = ", actions.shape)  # (records, ) => int
-# print("returns shape = ", returns.shape)  # (101, 1) => float
-print("done_idxs shape = ", done_idxs.shape)  # (100, ) => 256 * i => 256, 512, 768
-print("rtgs shape = ", rtgs.shape)  # (records, )  => float
+# print("actions shape = ", actions.shape)  # (records, ) => int
+# # print("returns shape = ", returns.shape)  # (101, 1) => float
+# print("done_idxs shape = ", done_idxs.shape)  # (100, ) => 256 * i => 256, 512, 768
+# print("rtgs shape = ", rtgs.shape)  # (records, )  => float
 
-print("timesteps shape = ", timesteps.shape)  # (records, )  => [0-255][0-255][0-255]
-if not(exp_config.num_meta_features) == 0:
-    print("meta_data shape = ", meta_data.shape)  # (records, 6)  => negative values
+# print("timesteps shape = ", timesteps.shape)  # (records, )  => [0-255][0-255][0-255]
+# if not(exp_config.num_meta_features) == 0:
+#     print("meta_data shape = ", meta_data.shape)  # (records, 6)  => negative values
 
-print("benchmarks shape = ", benchmarks.shape)  # (records, 1)  => all 0s`
-print("stepwise_returns shape = ", stepwise_returns.shape)  # (records, 1)  => float
-print("lengths shape = ", lengths.shape)  # (records, 1) => 63s and 0s
+# print("benchmarks shape = ", benchmarks.shape)  # (records, 1)  => all 0s`
+# print("stepwise_returns shape = ", stepwise_returns.shape)  # (records, 1)  => float
+# print("lengths shape = ", lengths.shape)  # (records, 1) => 63s and 0s
 print("============================================================================================================")
 
 
@@ -293,7 +295,10 @@ tconf = TrainerConfig(
     test_all_macro = args.test_all_macro)
 print("trainerconfig finish")
 
+# For unseen machine
+
+
 # => my test_dataset in place of None
-trainer = Trainer(model, train_dataset, test_dataset, tconf, cfg_to_start_with, exp_config)
+trainer = Trainer(model, train_dataset, test_dataset, tconf, cfg_to_start_with, exp_config, unseen_machine)
 print("trainer build finish")
 trainer.train()
