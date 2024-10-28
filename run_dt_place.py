@@ -112,7 +112,7 @@ class StateActionReturnDataset(Dataset):
 # args.is_eval_only = False
 
 p=args.p
-model_path = args.mpath
+model_path = None if args.mpath == "None" else args.mpath
 cd=(1,1)
 nf=-1
 nmf=0
