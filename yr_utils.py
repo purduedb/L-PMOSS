@@ -1314,12 +1314,12 @@ def env_update(
     """
     curr_ts = len(actions)
     # print("TS = ", curr_ts)
-    if curr_ts == exp_config.cnt_grid_cells/2:
-        bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
-        cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
-        obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
-        chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
-        obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
+    # if curr_ts == exp_config.cnt_grid_cells/2:
+    #     bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
+    #     cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
+    #     obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+    #     chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+    #     obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
         
     state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
     mask_already_full = np.where(obs_mask_core == 0)
