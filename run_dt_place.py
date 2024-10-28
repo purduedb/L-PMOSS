@@ -17,12 +17,31 @@ def get_parameter_number(model):
     trainable_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print({'Total': total_num, 'Trainable': trainable_num})
 
+
+print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
+print(torch.__version__)       # Check PyTorch version
+print(torch.version.cuda)      # Check CUDA version
+
+try:
+    x = torch.tensor([1.0]).to("cuda")
+    print("CUDA is working!")
+except Exception as e:
+    print("CUDA is not available:", e)
+
+def get_parameter_number(model):
+    total_num = sum(p.numel() for p in model.parameters())
+    trainable_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print({'Total': total_num, 'Trainable': trainable_num})
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=123)
 parser.add_argument('--context_length', type=int, default=100)  # my=> 100 in stead of 256
 parser.add_argument('--epochs', type=int, default=10000)
 parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--cuda', type=str, default='1,2,3')
+parser.add_argument('--cuda', type=str, default='0')
 parser.add_argument('--is_eval_only', action='store_true')
 parser.add_argument('--no_eval_only', action='store_false')
 parser.add_argument('--test_all_macro', action='store_true')
