@@ -88,3 +88,15 @@ python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc754
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 27 --ecfg 35 --sidx 265 --is_eval_only --rtg 2
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 27 --ecfg 37 --sidx 266 --is_eval_only --rtg 2
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 27 --ecfg 47 --sidx 267 --is_eval_only --rtg 2
+
+
+For unseen workload: K4
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 100 --sidx 259 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 101 --sidx 260 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 102 --sidx 261 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 42 --sidx 262 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 44 --sidx 263 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 46  --sidx 264 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 54 --sidx 265 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 56 --sidx 266 --is_eval_only --rtg 2
+python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 47 --ecfg 1 --sidx 267 --is_eval_only --rtg 2
