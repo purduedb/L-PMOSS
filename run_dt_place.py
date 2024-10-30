@@ -141,6 +141,10 @@ elif p == "intel_sb_4s_4n":
     cd = (8,8)
     nf=15
     nmf=16
+elif p == "amd_epyc7302_2s_2n":
+    cd = (8,8)
+    nf=12
+    nmf=0
 
 
 workload = args.wl

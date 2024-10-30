@@ -595,6 +595,12 @@ def gen_token_for_eval(exp_config):
         for _ in refine:
             grid_features[:, _, :] = 0.00001
         grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    elif exp_config.processor == "amd_epyc7302_2s_2n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [245, 246, 248, 249, 250, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
     """"""
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
@@ -838,9 +844,12 @@ def gen_token(exp_config):
     # (8, 1931, 2) (1931,)
     # (1931, 2) (1931, 8, 1) (1931, 8, 1)
     # (1931, 8, 2)
-    
+    # for _ in range(grid_features.shape[1]):
+    #     print(_, grid_features[0, _, :])
+    #     zz=input()
 
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+
 
     """
     For cleaning the data in amd processors, it's a bad practice but well
@@ -851,6 +860,13 @@ def gen_token(exp_config):
         for _ in refine:
             grid_features[:, _, :] = 0.00001
         grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    elif exp_config.processor == "amd_epyc7302_2s_2n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [245, 246, 248, 249, 250, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    
     """"""
     scaler = StandardScaler()
     grid_features = scaler.fit_transform(grid_features)
@@ -863,9 +879,6 @@ def gen_token(exp_config):
     grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
     grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
     
-    # for _ in range(grid_features.shape[1]):
-    #     print(grid_features[0, _, :])
-    #     zz=input()
 
     if not(exp_config.num_meta_features == 0):
         mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
@@ -1099,6 +1112,12 @@ def get_state(action, ts, exp_config):
         for _ in refine:
             grid_features[:, _, :] = 0.00001
         grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    elif exp_config.processor == "amd_epyc7302_2s_2n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [245, 246, 248, 249, 250, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
     """"""
 
     grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
@@ -1158,6 +1177,12 @@ def get_state_up(action, ts, exp_config):
     if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
         grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
         refine = [244, 245, 246, 251]
+        for _ in refine:
+            grid_features[:, _, :] = 0.00001
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+    elif exp_config.processor == "amd_epyc7302_2s_2n":
+        grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+        refine = [245, 246, 248, 249, 250, 251]
         for _ in refine:
             grid_features[:, _, :] = 0.00001
         grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
