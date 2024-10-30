@@ -78,8 +78,7 @@ python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc754
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 31 --ecfg 3 --sidx 263 --is_eval_only --rtg 2
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 31 --ecfg 5 --sidx 264 --is_eval_only --rtg 2
 
-For unseen workload 
-
+For unseen workload: OSM- A
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 27 --ecfg 100 --sidx 259 --is_eval_only --rtg 2
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 27 --ecfg 101 --sidx 260 --is_eval_only --rtg 2
 python run_dt_place.py --p "amd_epyc7543_2s_8n" --mpath "save_models/amd_epyc7543_2s_8n/0/2024-10-25-23-46-27-0.988.pkl" --wl 27 --ecfg 102 --sidx 261 --is_eval_only --rtg 2
