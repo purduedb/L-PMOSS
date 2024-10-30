@@ -53,6 +53,8 @@ parser.add_argument('--ecfg', type=int, default=30)
 parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
 parser.add_argument('--mpath', type=str, default="save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
+parser.add_argument('--dbidx', type=int, default=0)
+parser.add_argument('--idxkb', type=str, default="kb_b__")
 
 args = parser.parse_args()
 
@@ -163,10 +165,12 @@ eval_start_cfg = args.ecfg
 save_idx = args.sidx
 rtg_scale = args.rtg
 cfg_to_start_with = args.ecfg
+db_index = args.dbidx
+db_index_kb_folder = args.idxkb
 
 exp_config = ExpConfig(processor=p, 
                        chassis_dim=cd, 
-                       index=db_index.BTREE.value,
+                       index=db_index,
                     #    workload=wl.SD_YCSB_WKLOADA.value,
                        workload=workload,
                        num_features=nf, 
@@ -179,7 +183,8 @@ exp_config = ExpConfig(processor=p,
                        rtg_div=100000,
                     #    eval_start_cfg=11,
                         eval_start_cfg=eval_start_cfg,
-                       idx_kb_folder="kb_b__",
+                    #    idx_kb_folder="kb_b__",
+                    idx_kb_folder=db_index_kb_folder,
                        save_idx = save_idx,
                     #    save_idx = 201
                        )

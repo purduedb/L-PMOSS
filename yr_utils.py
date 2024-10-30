@@ -406,17 +406,28 @@ def load_actions(exp_config, cfg, wl, onlyNUMA=False):
     cIdx = int(cfg)
     
     # TODO: Have the machine name and access name posssibly then add the config stuff
-    
-    if cIdx >= 200:
-        if exp_config.cnt_grid_cells == 100:
-            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + ".txt"
+    if exp_config.index==0:
+        if cIdx >= 200:
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + ".txt"
+            else:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
         else:
-            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
-    else:
-        if exp_config.cnt_grid_cells == 100:
-            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+            else:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    elif exp_config.index==1:
+        if cIdx >= 200:
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_r.txt"
+            else:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + "_r.txt"
         else:
-            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_r.txt"
+            else:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + "_r.txt"
     
     config = np.loadtxt(machine_config_path)
     
@@ -461,17 +472,28 @@ def load_actions_hw_pos(exp_config, cfg, wl, onlyNUMA=False):
     cIdx = int(cfg)
     
     # TODO: Have the machine name and access name posssibly then add the config stuff
-    if cIdx >= 200:
-        if exp_config.cnt_grid_cells == 100:
-            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + ".txt"
+    if exp_config.index==1:
+        if cIdx >= 200:
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + ".txt"
+            else:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
         else:
-            machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
-    else:
-        if exp_config.cnt_grid_cells == 100:
-            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + ".txt"
+            else:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    elif exp_config.index==1:
+        if cIdx >= 200:
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_r.txt"
+            else:
+                machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + "_r.txt"
         else:
-            machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
-    
+            if exp_config.cnt_grid_cells == 100:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_r.txt"
+            else:
+                machine_config_path = "./machine_configs/" + exp_config.processor + "/" + "c_" + str(cIdx) + "_" + str(exp_config.cnt_grid_cells) + "_r.txt"
     
     config = np.loadtxt(machine_config_path)
     
@@ -519,10 +541,13 @@ def retrieve_config(exp_config, out_actions, cfg_idx):
     retrieved_configs_core = np.reshape(workers, (exp_config.policy_dim[0], exp_config.policy_dim[1]))
     retrieved_configs = np.vstack((retrieved_configs_numa, retrieved_configs_core))
     retrieved_configs = retrieved_configs.astype(int)
-    
     save_cfg_dir = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(exp_config.workload)
     os.makedirs(save_cfg_dir, exist_ok=True)
-    cfg_file = save_cfg_dir + "/c_" + str(cfg_idx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    if exp_config.index == 0:
+        cfg_file = save_cfg_dir + "/c_" + str(cfg_idx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
+    elif exp_config.index == 1:
+        cfg_file = save_cfg_dir + "/c_" + str(cfg_idx) + "_" + str(exp_config.cnt_grid_cells) + "_r.txt"
+    
     np.savetxt(cfg_file, retrieved_configs, fmt='%i')
     return retrieved_configs
 
