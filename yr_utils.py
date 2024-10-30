@@ -472,7 +472,7 @@ def load_actions_hw_pos(exp_config, cfg, wl, onlyNUMA=False):
     cIdx = int(cfg)
     
     # TODO: Have the machine name and access name posssibly then add the config stuff
-    if exp_config.index==1:
+    if exp_config.index==0:
         if cIdx >= 200:
             if exp_config.cnt_grid_cells == 100:
                 machine_config_path = "./pmoss_machine_configs/" + exp_config.processor + "/" + str(int(wl)) + "/c_" + str(cIdx) + ".txt"
