@@ -54,7 +54,7 @@ parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
 parser.add_argument('--mpath', type=str, default="save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 parser.add_argument('--dbidx', type=int, default=0)
-parser.add_argument('--idxkb', type=str, default="kb_b__")
+parser.add_argument('--idxkb', type=str, default="kb_b")
 
 args = parser.parse_args()
 
@@ -171,7 +171,7 @@ db_index_kb_folder = args.idxkb
 exp_config = ExpConfig(processor=p, 
                        chassis_dim=cd, 
                        index=db_index,
-                    #    workload=wl.SD_YCSB_WKLOADA.value,
+                        # workload=wl.SD_YCSB_WKLOADA.value,
                        workload=workload,
                        num_features=nf, 
                        num_meta_features=nmf, 
