@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset
 from mingpt.model_placement import GPT, GPTConfig
 from mingpt.trainer_placement import Trainer, TrainerConfig
-from yr_utils import gen_token, gen_token_for_eval
+from yr_utils import gen_token, gen_token_for_eval, gen_token_for_all
 from torch.utils.data.dataloader import DataLoader
 from pmoss_configs import *
 
@@ -131,37 +131,36 @@ class StateActionReturnDataset(Dataset):
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
 # args.is_eval_only = False
-
-p=args.p
 model_path = None if args.mpath == "None" else args.mpath
-cd=(1,1)
-nf=-1
-nmf=0
-if p == "intel_skx_4s_8n":
-    cd = (8,12)
-    nf=15
-    nmf=24  # 16 + 8 
-elif p == "amd_epyc7543_2s_8n":
-    cd = (8,8)
-    nf=12
-    nmf=0
-elif p == "nvidia_gh_1s_1n":
-    cd = (8,9)
-    nf=12
-    nmf=0
-elif p == "amd_epyc7543_2s_2n":
-    cd = (8,8)
-    nf=12
-    nmf=0
-    # "Needs to be updated"
-elif p == "intel_sb_4s_4n":
-    cd = (8,8)
-    nf=15
-    nmf=16
-elif p == "all":
-    cd = (8,12)
-    nf=15
-    nmf=24
+# p=args.p
+# cd=(1,1)
+# nf=-1
+# nmf=0
+# if p == "intel_skx_4s_8n":
+#     cd = (8,12)
+#     nf=15
+#     nmf=24  # 16 + 8 
+# elif p == "amd_epyc7543_2s_8n":
+#     cd = (8,8)
+#     nf=12
+#     nmf=0
+# elif p == "nvidia_gh_1s_1n":
+#     cd = (8,9)
+#     nf=12
+#     nmf=0
+# elif p == "amd_epyc7543_2s_2n":
+#     cd = (8,8)
+#     nf=12
+#     nmf=0
+#     # "Needs to be updated"
+# elif p == "intel_sb_4s_4n":
+#     cd = (8,8)
+#     nf=15
+#     nmf=16
+# elif p == "all":
+#     cd = (8,12)
+#     nf=15
+#     nmf=24
 
 workload = args.wl
 eval_start_cfg = args.ecfg
@@ -171,29 +170,38 @@ cfg_to_start_with = args.ecfg
 db_index = args.dbidx
 db_index_kb_folder = args.idxkb
 
-exp_config = ExpConfig(processor=p, 
-                       chassis_dim=cd, 
-                       index=db_index,
-                        # workload=wl.SD_YCSB_WKLOADA.value,
-                       workload=workload,
-                       num_features=nf, 
-                       num_meta_features=nmf, 
-                       cnt_grid_cells=256, 
-                       cfg_par=4, 
-                       per_cfg_sample=7, # 5
-                       policy_dim = (16, 16), 
-                       rtg_scale=rtg_scale,
-                       rtg_div=100000,
-                    #    eval_start_cfg=11,
+cd=(8,12)
+nf=15
+nmf=24
+glb_exp_config = []
+for p in ["intel_skx_4s_8n"]:
+    exp_config = ExpConfig(processor=p, 
+                        chassis_dim=cd, 
+                        index=db_index,
+                        workload=workload,
+                        num_features=nf, 
+                        num_meta_features=nmf, 
+                        cnt_grid_cells=256, 
+                        cfg_par=4, 
+                        per_cfg_sample=7, # 5
+                        policy_dim = (16, 16), 
+                        rtg_scale=rtg_scale,
+                        rtg_div=100000,
                         eval_start_cfg=eval_start_cfg,
-                    #    idx_kb_folder="kb_b__",
-                    idx_kb_folder=db_index_kb_folder,
-                       save_idx = save_idx,
-                    #    save_idx = 201
+                        idx_kb_folder=db_index_kb_folder,
+                        save_idx = save_idx,
                        )
-print(exp_config)
+    glb_exp_config.append(exp_config)
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
-    = gen_token(exp_config)
+    = gen_token_for_all(glb_exp_config)
+
+# obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
+#     = gen_token(exp_config)
+
+
+# They should have stuff of all 
+
+
 
 # cut = int(obss.shape[0]*0.5)
 # obss = obss[:cut]
