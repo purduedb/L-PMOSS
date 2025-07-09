@@ -7,7 +7,7 @@ np.set_printoptions(threshold=sys.maxsize)
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
 import copy
 import os 
-
+from pmoss_configs import processor_dict
 def load_edge_index(cGridCell):
 		if machine == 0:
 				sample_array = np.loadtxt("/home/yrayhan/works/lpmoss/kb_b/" + str(CPUID[0]) + "/query_view.txt")
@@ -834,6 +834,268 @@ def gen_token_for_eval(exp_config):
 		return obss, obss_s, obss_mask, actions_, stepwise_returns, rtgs, done_idxs, timesteps, metas, lengths, benchmarks
 
 
+def gen_token_for_eval_for_all(glb_exp_config):
+	obss = []
+	obss_s = []
+	obss_mask = []
+	actions = []
+	stepwise_returns = []
+	rtgs = []
+	done_idxs = []
+	timesteps = []
+	metas = []
+	actions_ = []
+	for exp_config in glb_exp_config:
+		# (tr, 2) (tr, nGridCells, nFeatures) (tr, 100, 5)
+		idx_array, grid_features = load_hardware_snapshot(exp_config)
+		cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
+		cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
+		if not(exp_config.num_meta_features == 0):
+			if('intel' in exp_config.processor):
+				cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
+				upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
+				mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
+				upi_tput = np.reshape(upi_tput, (upi_tput.shape[0], -1))
+				mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))        
+				mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
+			else:
+				mc_tput = np.full((idx_array.shape[0], exp_config.num_meta_features), -1)
+
+		if(mc_tput.shape[1] != exp_config.num_global_meta_features):
+			padding = np.full((mc_tput.shape[0], exp_config.num_global_meta_features-mc_tput.shape[1]), -1)
+			mc_tput = np.hstack((mc_tput, padding))		
+
+		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+		
+		"""
+		For cleaning the data in amd processors, it's a bad practice but well
+		"""
+		# if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+		# 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+		# 		refine = [244, 245, 246, 251]
+		# 		for _ in refine:
+		# 				grid_features[:, _, :] = 0.00001
+		# 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+		""""""
+		scaler = StandardScaler()
+		grid_features = scaler.fit_transform(grid_features)
+		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+
+		"""
+		Add processor specific features
+		"""
+		p_feat = [-1, -1]
+		for key in processor_dict:
+				if key in exp_config.processor:
+					p_feat[0] = processor_dict[key]    
+					break
+		p_feat[1] = exp_config.machine.numa_node
+
+		grid_features_p = np.full((grid_features.shape[0], exp_config.cnt_grid_cells, 2), p_feat)
+		grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
+		grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
+		grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
+		grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
+		# grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
+		grid_features = np.concatenate([grid_features, grid_features_idx, grid_features_p], axis=2)
+
+		
+
+
+
+
+		if not(exp_config.num_meta_features == 0):
+				mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))
+				scaler_mc = StandardScaler()
+				mc_tput = scaler_mc.fit_transform(mc_tput)
+				mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
+				mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
+		
+		orginal_max_tput_dset = find_correct_max_tput(exp_config) * exp_config.rtg_scale
+		orginal_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale
+
+		
+		cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
+
+		num_numa = exp_config.machine.numa_node
+		num_worker_per_numa = exp_config.machine.worker_per_numa
+		lbound_core = 2 # 100 / 56
+		lbound_numa = 13 # 100/8
+		chassis_dimx = exp_config.chassis_dim[0]
+		chassis_dimy = exp_config.chassis_dim[1]
+
+		for _ in range(idx_array.shape[0]):  # tr
+				cfg_ = idx_array[_][0]
+				wl_ = idx_array[_][2]
+				
+				if cfg_!= exp_config.eval_start_cfg and wl_ != exp_config.workload:
+						continue
+				
+				# Load the actions (how many for each complete row? = no of grid cells)
+				act_ = load_actions(exp_config, cfg_, wl_)
+				actions.append(act_)
+
+				if not(exp_config.num_meta_features == 0):
+						# Load the meta mc_data
+						metas.append(mc_tput[_])
+
+				
+				"""Update the obss mask: mask should be where you should not put
+						Which one to off? 
+				"""
+				numa_machine_obs = np.full((chassis_dimx * chassis_dimy, ), False)
+				numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+3), 0, dtype=np.float64)
+				# numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), True)
+				
+				numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
+				obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+				chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+				obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
+				mask_already_full = np.where(obs_mask_core==0)
+				numa_machine_obss_mask[mask_already_full] = True
+
+
+				st_return = np.full((act_.shape[0], ), 0)
+				tg_return = np.full((act_.shape[0]+1, ), 0) # => made it +1: april 16
+				
+				max_tput_dset = orginal_max_tput_dset
+				tg_return[0] = max_tput_dset
+
+				obss.append(copy.deepcopy(numa_machine_obs))  # empty obs
+				obss_s.append(copy.deepcopy(numa_machine_obs_s))
+				obss_mask.append(copy.deepcopy(numa_machine_obss_mask))
+				
+				# print(torch.tensor(obss).view(-1, 8, 8))
+				# print(query_throughput[_])
+				# print(query_throughput_numa[_])
+
+				flag = False 
+				actions_individual = np.zeros_like(act_)
+				for i in range(act_.shape[0]):  # each timestep 
+						# map_idx=exp_config.machine.li_worker.index(int(act_[i]))
+						# a = exp_config.machine.worker_to_chassis_pos_mapping[map_idx]
+						a = int(cores_position[int(act_[i])])
+						actions_individual[i] = a
+
+						# => Add this if condition so that i can place stuff again
+						# if i > 32:
+						#     obs_mask_core = np.full((num_numa * num_worker_per_numa, ), 2)
+						# if i > 60 and not(flag):  # For obs_mask_core = [2+1]
+						#     obs_mask_core = np.full((num_numa * num_worker_per_numa, ), 1)
+						#     flag = True
+
+						# numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
+						# mask_already_full = obs_mask_core.nonzero()
+						# numa_machine_obss_mask[mask_already_full] = True
+
+						"""Update the obss mask: mask should be where you should not put
+								Which one to off? 
+						"""
+						numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
+						obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
+						chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
+						obs_mask_core[np.array(chassis_act_).astype(int)] = lbound_core
+						mask_already_full = np.where(obs_mask_core==0)
+						numa_machine_obss_mask[mask_already_full] = True
+
+						st_return[i] = query_throughput[_][i]
+						# tg_return[0] should be the max value and equal across
+						if i != act_.shape[0]-1:
+								tg_return[i+1] = max_tput_dset - query_throughput[_][i]
+						max_tput_dset = tg_return[i+1]
+						
+						# By placing the [ith] grid cell, at the [a]th place in the machine
+						# you take the grid feature of the ith cell currently,
+						# i am just replacing the values, what happens if they have diff value or whether this is not possible at all
+						# actions.append(a)
+						numa_machine_obs[int(a)] = True
+						numa_machine_obs_s[int(a)] += grid_features[_][i]
+						
+						if i != act_.shape[0]-1:
+								obss.append(copy.deepcopy(numa_machine_obs))
+								obss_s.append(copy.deepcopy(numa_machine_obs_s))
+								obss_mask.append(copy.deepcopy(numa_machine_obss_mask))
+						
+						# print(torch.tensor(obss).view(-1, 8, 8))
+						# zz = input()
+						# print(torch.tensor(numa_machine_obs).view(8, 8))
+						# print(torch.tensor(numa_machine_obss_mask).view(8, 8))
+						# print("=======================")
+						# if i == 10:
+						#     exit()
+				# print(tg_return)
+				# print(st_return)
+				# print("=======================")
+				# actions.append(-1)
+				actions_.append(actions_individual)
+				
+
+				done_idxs.append((_+1) * i)
+				rtgs.append(copy.deepcopy(tg_return[:exp_config.cnt_grid_cells]))  # parameterize it 
+				stepwise_returns.append(copy.deepcopy(st_return))
+				timesteps.append(np.reshape(np.arange(act_.shape[0]), (-1, )))
+
+				# print(torch.tensor(rtgs).view(-1, 100))
+				# print(torch.tensor(stepwise_returns).view(-1, 100))
+				
+	# actions = np.asarray(actions)  # (nsamples * ngridcells, 1)
+	# # (nSamples * (nGridcells+1 = initial observation = 0s), num_numa,num_worker_per_numa)
+	# obss = np.asarray(obss)
+	# # (nSamples * (nGridcells+1 = initial observation = 0s), num_numa, num_worker_per_numa, nFeatures)
+	# obss_s = np.asarray(obss_s)
+	# obss_mask = np.asarray(obss_mask)
+
+	# stepwise_returns = np.asarray(stepwise_returns)  # (nSamples * nGridcells, 1)
+	# rtgs = np.asarray(rtgs) # (nSamples * nGridcells, 1)
+	# done_idxs = np.asarray(done_idxs)  # (nSamples, 1)
+	# timesteps = np.asarray(timesteps) # (nsamples * ngridcells, 1)
+
+	# print(actions.shape)
+	# print(obss.shape)
+	# print(obss_s.shape)
+	# print(obss_mask.shape)
+	# print(stepwise_returns.shape)
+	# print(rtgs.shape)
+	# print(done_idxs.shape)
+	# print(timesteps.shape)
+	
+	"""Send the positions in the hardware, because this is what we actually do the prediction on"""
+	actions_ = np.reshape(np.asarray(actions_), (-1, ))  # (nsamples * ngridcells, 1)
+	actions = np.reshape(np.asarray(actions), (-1, ))  # (nsamples * ngridcells, 1)
+	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa,num_worker_per_numa)
+	obss = np.reshape(np.asarray(obss), (-1, 1, chassis_dimx, chassis_dimy))
+	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa, num_worker_per_numa, nFeatures)
+	obss_s = np.reshape(np.asarray(obss_s), (-1, 1, chassis_dimx, chassis_dimy, exp_config.num_features+3))
+	obss_mask = np.reshape(np.asarray(obss_mask), (-1, 1, chassis_dimx, chassis_dimy))
+
+	stepwise_returns = np.reshape(np.asarray(stepwise_returns), (-1, 1))  # (nSamples * nGridcells, 1)
+	rtgs = np.reshape(np.asarray(rtgs), (-1, 1))  # (nSamples * nGridcells, 1)
+	done_idxs = np.reshape(np.asarray(done_idxs), (-1, ))  # (nSamples, 1)
+	timesteps = np.reshape(np.asarray(timesteps), (-1, ))  # (nsamples * ngridcells, 1)
+
+	rtgs = rtgs / exp_config.rtg_div
+
+	print(actions.shape)
+	print(obss.shape)
+	print(obss_s.shape)
+	print(obss_mask.shape)
+	print(stepwise_returns.shape)
+	print(rtgs.shape)
+	print(done_idxs.shape)
+	print(timesteps.shape)
+	
+	if not(exp_config.num_meta_features == 0):
+			metas = np.reshape(np.asarray(metas), (obss_s.shape[0], -1))  # (nSamples * nGridcells, 1)
+			# metas = np.zeros((obss_s.shape[0], 6))
+
+	
+	# This definitely needs work
+	lengths = np.full((obss_s.shape[0], 1), exp_config.cnt_grid_cells)  # it should be actually the number of valid actions until which timestep
+	benchmarks = np.zeros((obss_s.shape[0], 1))
+	
+	'''Sedning actions_ instead of actions'''
+	return obss, obss_s, obss_mask, actions_, stepwise_returns, rtgs, done_idxs, timesteps, metas, lengths, benchmarks
+
 
 def gen_token(exp_config):
 		
@@ -1122,15 +1384,21 @@ def gen_token_for_all(glb_exp_config):
 		
 
 		if not(exp_config.num_meta_features == 0):
-			cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
-			upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
-			mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
-			upi_tput = np.reshape(upi_tput, (upi_tput.shape[0], -1))
-			mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))        
-			mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
-
-
-		
+			if('intel' in exp_config.processor):
+				cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
+				upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
+				mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
+				upi_tput = np.reshape(upi_tput, (upi_tput.shape[0], -1))
+				mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))        
+				mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
+			else:
+				mc_tput = np.full((idx_array.shape[0], exp_config.num_meta_features), -1)
+		if(mc_tput.shape[1] != exp_config.num_global_meta_features):
+			padding = np.full((mc_tput.shape[0], exp_config.num_global_meta_features-mc_tput.shape[1]), -1)
+			mc_tput = np.hstack((mc_tput, padding))
+			
+			
+			
 		# print(idx_array.shape, grid_features.shape)
 		# print(cfg_q.shape, query_throughput.shape)
 		# print(cfg_q2.shape, query_throughput_numa.shape)
@@ -1142,7 +1410,6 @@ def gen_token_for_all(glb_exp_config):
 		# (1931, 2) (1931, 8, 1) (1931, 8, 1)
 		# (1931, 8, 2)
 		
-
 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
 
 		"""
@@ -1160,12 +1427,25 @@ def gen_token_for_all(glb_exp_config):
 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
 
 
+		"""
+		Add processor specific features
+		"""
+		p_feat = [-1, -1]
+		for key in processor_dict:
+				if key in exp_config.processor:
+					p_feat[0] = processor_dict[key]    
+					break
+		p_feat[1] = exp_config.machine.numa_node
+
+		grid_features_p = np.full((grid_features.shape[0], exp_config.cnt_grid_cells, 2), p_feat)
 		grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
 		grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
 		grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
 		grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
-		grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
-		
+	
+		# grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
+		grid_features = np.concatenate([grid_features, grid_features_idx, grid_features_p], axis=2)
+
 		# for _ in range(grid_features.shape[1]):
 		#     print(grid_features[0, _, :])
 		#     zz=input()
@@ -1212,7 +1492,7 @@ def gen_token_for_all(glb_exp_config):
 			if not(exp_config.num_meta_features == 0):
 					# Load the meta mc_data
 					metas.append(mc_tput[_])
-
+					
 			
 			# TODO: 
 			# obs_mask_core = np.full((num_numa * num_worker_per_numa, ), lbound_core)
@@ -1221,7 +1501,7 @@ def gen_token_for_all(glb_exp_config):
 			
 
 			numa_machine_obs = np.full((chassis_dimx * chassis_dimy, ), False)
-			numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+1), 0, dtype=np.float64)
+			numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+3), 0, dtype=np.float64)
 			"""Update the obss mask: mask should be where you should not put
 					Which one to off? 
 			"""
@@ -1347,7 +1627,7 @@ def gen_token_for_all(glb_exp_config):
 	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa,num_worker_per_numa)
 	obss = np.reshape(np.asarray(obss), (-1, 1, chassis_dimx, chassis_dimy))
 	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa, num_worker_per_numa, exp_config.num_features)
-	obss_s = np.reshape(np.asarray(obss_s), (-1, 1, chassis_dimx, chassis_dimy, exp_config.num_features+1))
+	obss_s = np.reshape(np.asarray(obss_s), (-1, 1, chassis_dimx, chassis_dimy, exp_config.num_features+3))
 	obss_mask = np.reshape(np.asarray(obss_mask), (-1, 1, chassis_dimx, chassis_dimy))
 
 	stepwise_returns = np.reshape(np.asarray(stepwise_returns), (-1, 1))  # (nSamples * nGridcells, 1)
@@ -1371,8 +1651,9 @@ def gen_token_for_all(glb_exp_config):
 	if not(exp_config.num_meta_features == 0):
 		metas = np.reshape(np.asarray(metas), (obss_s.shape[0], -1))  # (nSamples * nGridcells, 1)
 		# metas = np.zeros((obss_s.shape[0], 6))
-
 	
+
+
 	# This definitely needs work
 	lengths = np.full((obss_s.shape[0], 1), exp_config.cnt_grid_cells)  # it should be actually the number of valid actions until which timestep
 	benchmarks = np.zeros((obss_s.shape[0], 1))

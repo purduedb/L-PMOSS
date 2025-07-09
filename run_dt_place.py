@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset
 from mingpt.model_placement import GPT, GPTConfig
 from mingpt.trainer_placement import Trainer, TrainerConfig
-from yr_utils import gen_token, gen_token_for_eval, gen_token_for_all
+from yr_utils import gen_token, gen_token_for_eval, gen_token_for_all, gen_token_for_eval_for_all
 from torch.utils.data.dataloader import DataLoader
 from pmoss_configs import *
 
@@ -170,11 +170,12 @@ cfg_to_start_with = args.ecfg
 db_index = args.dbidx
 db_index_kb_folder = args.idxkb
 
+
 cd=(8,12)
 nf=15
 nmf=24
 glb_exp_config = []
-for p in ["intel_skx_4s_8n"]:
+for p in ["intel_skx_4s_8n", "intel_sb_4s_4n", "amd_epyc7543_2s_8n"]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
                         index=db_index,
@@ -221,7 +222,9 @@ obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, 
 
 # => my 
 obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
-    = gen_token_for_eval(exp_config)
+    = gen_token_for_eval_for_all(glb_exp_config)
+# obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
+#     = gen_token_for_eval(exp_config)
 
 print("============================================================================================================")
 print("create dataset finish.")

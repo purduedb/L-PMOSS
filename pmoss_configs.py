@@ -59,7 +59,7 @@ class ExpConfig:
                                                self.idx_kb_folder +"/"
                                                )
         self.save_idx = save_idx    
-        
+        self.num_global_meta_features = 24
 
 
     def __repr__(self):
@@ -140,5 +140,17 @@ class db_index(Enum):
     RTREE = 1
     QUADTREE = 2
 
+class db_machines(Enum):
+    BTREE = 0
+    RTREE = 1
+    QUADTREE = 2
     
+processor_dict = {
+  "intel_skx": 0,
+  "intel_ice": 1,
+  "intel_sb": 2,
+  "amd_epyc7543": 3,
+  "nvidia": 4,
+  "ibm": 5
+}
 
