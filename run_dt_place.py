@@ -158,7 +158,10 @@ elif p == "intel_sb_4s_4n":
     cd = (8,8)
     nf=15
     nmf=16
-
+elif p == "all":
+    cd = (8,12)
+    nf=15
+    nmf=24
 
 workload = args.wl
 eval_start_cfg = args.ecfg
