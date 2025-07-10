@@ -130,7 +130,8 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-# args.is_eval_only = False
+print(args.is_eval_only)
+args.is_eval_only = True
 model_path = None if args.mpath == "None" else args.mpath
 # p=args.p
 # cd=(1,1)
@@ -175,7 +176,11 @@ cd=(8,12)
 nf=15
 nmf=24
 glb_exp_config = []
-for p in ["intel_skx_4s_8n", "intel_sb_4s_4n", "amd_epyc7543_2s_8n"]:
+for p in [
+    "intel_skx_4s_8n", 
+    # "intel_sb_4s_4n", 
+    # "amd_epyc7543_2s_8n"
+    ]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
                         index=db_index,
@@ -229,7 +234,7 @@ obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, time
 print("============================================================================================================")
 print("create dataset finish.")
 print("obss shape = ", obss.shape)  # (records, 1, grid, grid) => False, true
-print("obss_wire shape = ", obss_s.shape)  # (records, 1, grid, grid)  => float
+print("obss_wire shape = ", obss_s.shape)  # (records, 1, grid, grid, [nfeatures+1])  => float
 print("obss_mask shape = ", obss_mask.shape)  # (records, 1, grid, grid)  => True, false
 
 print("actions shape = ", actions.shape)  # (records, ) => int
@@ -303,8 +308,10 @@ mconf = GPTConfig(
     model_type="reward_conditioned", max_timestep=max(timesteps))
 
 model = GPT(mconf, exp_config)
-# model_path = None
+model_path = None
 # model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-23-07-27-55-0.949.pkl"
+# model_path = "save_models/amd_epyc7543_2s_8n/0/2025-07-10-13-50-51-0.740.pkl"
+
 # print(model_path)
 
 if model_path is not None:

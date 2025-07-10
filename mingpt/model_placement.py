@@ -157,51 +157,51 @@ class GPT(nn.Module):
         logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
         
         
+        if not(exp_config.num_meta_features) == 0:
+            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
+                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
+                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+                                    nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
+        else:
+            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
+                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
+                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+                                    nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
+        
+        self.meta_encoder_s = nn.Sequential(nn.Linear(self.num_mfeatures+2, 32), nn.ReLU(), nn.Linear(32, self.num_mfeatures))
+        
+
+        self.action_head = nn.Sequential(nn.Conv2d(3, 3+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
+                                 nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
+                                 nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
+                                 nn.Flatten())
+        self.action_head_s = nn.Sequential(nn.Conv2d(1, 3+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
+                                 nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
+                                 nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
+                                 nn.Flatten())
+        
         # if not(exp_config.num_meta_features) == 0:
-        #     self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-        #                             nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-        #                             nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-        #                             nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
+        #     self.state_encoder_s = nn.Sequential(nn.Conv2d(5+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
+        #                                 nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
+        #                                 nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+        #                                 nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
         # else:
-        #     self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-        #                             nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-        #                             nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-        #                             nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
+        #     self.state_encoder_s = nn.Sequential(nn.Conv2d(5+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
+        #                                 nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
+        #                                 nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+        #                                 nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
         
         # self.meta_encoder_s = nn.Sequential(nn.Linear(self.num_mfeatures, 32), nn.ReLU(), nn.Linear(32, self.num_mfeatures))
         
 
-        # self.action_head = nn.Sequential(nn.Conv2d(3, 3+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-        #                          nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
+        # self.action_head = nn.Sequential(nn.Conv2d(3, 5+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
+        #                          nn.Conv2d(5+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
         #                          nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
         #                          nn.Flatten())
-        # self.action_head_s = nn.Sequential(nn.Conv2d(1, 3+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-        #                          nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
+        # self.action_head_s = nn.Sequential(nn.Conv2d(1, 5+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
+        #                          nn.Conv2d(5+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
         #                          nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
         #                          nn.Flatten())
-        
-        if not(exp_config.num_meta_features) == 0:
-            self.state_encoder_s = nn.Sequential(nn.Conv2d(5+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-                                        nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-                                        nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-                                        nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
-        else:
-            self.state_encoder_s = nn.Sequential(nn.Conv2d(5+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-                                        nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-                                        nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-                                        nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
-        
-        self.meta_encoder_s = nn.Sequential(nn.Linear(self.num_mfeatures, 32), nn.ReLU(), nn.Linear(32, self.num_mfeatures))
-        
-
-        self.action_head = nn.Sequential(nn.Conv2d(3, 5+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-                                 nn.Conv2d(5+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
-                                 nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-                                 nn.Flatten())
-        self.action_head_s = nn.Sequential(nn.Conv2d(1, 5+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-                                 nn.Conv2d(5+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
-                                 nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-                                 nn.Flatten())
 
         self.one_kernel = nn.Sequential(nn.Conv2d(2, 1, 1, stride=1, padding=0), nn.Flatten())
 
@@ -311,15 +311,15 @@ class GPT(nn.Module):
         # else:
         circuit_embeddings = circuit_feas
         
-        # state_embeddings = self.state_encoder_s(
-        #     states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
-        #     )
         state_embeddings = self.state_encoder_s(
-            states.reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
+            states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
             )
+        # state_embeddings = self.state_encoder_s(
+        #     states.reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
+        #     )
         if not(self.exp_config.num_meta_features == 0):        
             meta_embeddings = self.meta_encoder_s(
-                meta_states[:, :].reshape(-1, self.num_mfeatures)
+                meta_states[:, :].reshape(-1, self.num_mfeatures+2)
                 )
             state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
         
@@ -413,8 +413,8 @@ class GPT(nn.Module):
         
         
         # Passing only the obss through the action_head_s        
-        # action_h = self.action_head_s(states[:, :, :].reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 1, :, :].reshape(-1, 1, self.chassis_dimx, self.chassis_dimy))    
-        action_h = self.action_head_s(states[:, :, :].reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 1, :, :].reshape(-1, 1, self.chassis_dimx, self.chassis_dimy))    
+        action_h = self.action_head_s(states[:, :, :].reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 1, :, :].reshape(-1, 1, self.chassis_dimx, self.chassis_dimy))    
+        # action_h = self.action_head_s(states[:, :, :].reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 1, :, :].reshape(-1, 1, self.chassis_dimx, self.chassis_dimy))    
         action_h = action_h.reshape(states.shape[0] * states.shape[1], 1, self.chassis_dimx, self.chassis_dimy)
         
         logits_action_h = torch.cat((logits.reshape(states.shape[0] * states.shape[1], 1, self.chassis_dimx, self.chassis_dimy), action_h), dim=1)
@@ -424,8 +424,8 @@ class GPT(nn.Module):
         
         
         # TODO: Double check if the mask indexing is correct or not!
-        # mask = states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 3+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
-        mask = states.reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 5+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
+        mask = states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 3+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
+        # mask = states.reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 5+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
 
         # print(mask[-1,-1])
         # print(logits[-1,-1])

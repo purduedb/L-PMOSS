@@ -884,24 +884,20 @@ def gen_token_for_eval_for_all(glb_exp_config):
 		"""
 		Add processor specific features
 		"""
-		p_feat = [-1, -1]
-		for key in processor_dict:
-				if key in exp_config.processor:
-					p_feat[0] = processor_dict[key]    
-					break
-		p_feat[1] = exp_config.machine.numa_node
+		# p_feat = [-1, -1]
+		# for key in processor_dict:
+		# 		if key in exp_config.processor:
+		# 			p_feat[0] = processor_dict[key]    
+		# 			break
+		# p_feat[1] = exp_config.machine.numa_node
 
-		grid_features_p = np.full((grid_features.shape[0], exp_config.cnt_grid_cells, 2), p_feat)
+		# grid_features_p = np.full((grid_features.shape[0], exp_config.cnt_grid_cells, 2), p_feat)
 		grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
 		grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
 		grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
 		grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
-		# grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
-		grid_features = np.concatenate([grid_features, grid_features_idx, grid_features_p], axis=2)
-
-		
-
-
+		grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
+		# grid_features = np.concatenate([grid_features, grid_features_idx, grid_features_p], axis=2)
 
 
 		if not(exp_config.num_meta_features == 0):
@@ -909,6 +905,14 @@ def gen_token_for_eval_for_all(glb_exp_config):
 				scaler_mc = StandardScaler()
 				mc_tput = scaler_mc.fit_transform(mc_tput)
 				mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
+				p_feat = [-1, -1]
+				for key in processor_dict:
+						if key in exp_config.processor:
+							p_feat[0] = processor_dict[key]    
+							break
+				p_feat[1] = exp_config.machine.numa_node
+				grid_features_p = np.full((mc_tput.shape[0], 1, 2), p_feat)
+				mc_tput = np.concatenate([mc_tput, grid_features_p], axis=2)
 				mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
 		
 		orginal_max_tput_dset = find_correct_max_tput(exp_config) * exp_config.rtg_scale
@@ -944,7 +948,7 @@ def gen_token_for_eval_for_all(glb_exp_config):
 						Which one to off? 
 				"""
 				numa_machine_obs = np.full((chassis_dimx * chassis_dimy, ), False)
-				numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+3), 0, dtype=np.float64)
+				numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+1), 0, dtype=np.float64)
 				# numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), True)
 				
 				numa_machine_obss_mask = np.full((chassis_dimx * chassis_dimy,), False)
@@ -1065,7 +1069,7 @@ def gen_token_for_eval_for_all(glb_exp_config):
 	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa,num_worker_per_numa)
 	obss = np.reshape(np.asarray(obss), (-1, 1, chassis_dimx, chassis_dimy))
 	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa, num_worker_per_numa, nFeatures)
-	obss_s = np.reshape(np.asarray(obss_s), (-1, 1, chassis_dimx, chassis_dimy, exp_config.num_features+3))
+	obss_s = np.reshape(np.asarray(obss_s), (-1, 1, chassis_dimx, chassis_dimy, exp_config.num_features+1))
 	obss_mask = np.reshape(np.asarray(obss_mask), (-1, 1, chassis_dimx, chassis_dimy))
 
 	stepwise_returns = np.reshape(np.asarray(stepwise_returns), (-1, 1))  # (nSamples * nGridcells, 1)
@@ -1430,21 +1434,12 @@ def gen_token_for_all(glb_exp_config):
 		"""
 		Add processor specific features
 		"""
-		p_feat = [-1, -1]
-		for key in processor_dict:
-				if key in exp_config.processor:
-					p_feat[0] = processor_dict[key]    
-					break
-		p_feat[1] = exp_config.machine.numa_node
-
-		grid_features_p = np.full((grid_features.shape[0], exp_config.cnt_grid_cells, 2), p_feat)
 		grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
 		grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
 		grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
 		grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
-	
-		# grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
-		grid_features = np.concatenate([grid_features, grid_features_idx, grid_features_p], axis=2)
+		grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
+		# grid_features = np.concatenate([grid_features, grid_features_idx, grid_features_p], axis=2)
 
 		# for _ in range(grid_features.shape[1]):
 		#     print(grid_features[0, _, :])
@@ -1455,8 +1450,18 @@ def gen_token_for_all(glb_exp_config):
 			scaler_mc = StandardScaler()
 			mc_tput = scaler_mc.fit_transform(mc_tput)
 			mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], 1, -1))
+			p_feat = [-1, -1]
+			for key in processor_dict:
+				if key in exp_config.processor:
+					p_feat[0] = processor_dict[key]    
+					break
+			p_feat[1] = exp_config.machine.numa_node
+			grid_features_p = np.full((mc_tput.shape[0], 1, 2), p_feat)
+			mc_tput = np.concatenate([mc_tput, grid_features_p], axis=2)
 			mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
-		
+			mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
+			
+
 		orginal_max_tput_dset = find_correct_max_tput(exp_config) * 1.0
 		
 		# obss = []
@@ -1501,7 +1506,7 @@ def gen_token_for_all(glb_exp_config):
 			
 
 			numa_machine_obs = np.full((chassis_dimx * chassis_dimy, ), False)
-			numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+3), 0, dtype=np.float64)
+			numa_machine_obs_s = np.full((chassis_dimx * chassis_dimy, exp_config.num_features+1), 0, dtype=np.float64)
 			"""Update the obss mask: mask should be where you should not put
 					Which one to off? 
 			"""
@@ -1627,7 +1632,7 @@ def gen_token_for_all(glb_exp_config):
 	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa,num_worker_per_numa)
 	obss = np.reshape(np.asarray(obss), (-1, 1, chassis_dimx, chassis_dimy))
 	# (nSamples * (nGridcells+1 = initial observation = 0s), num_numa, num_worker_per_numa, exp_config.num_features)
-	obss_s = np.reshape(np.asarray(obss_s), (-1, 1, chassis_dimx, chassis_dimy, exp_config.num_features+3))
+	obss_s = np.reshape(np.asarray(obss_s), (-1, 1, chassis_dimx, chassis_dimy, exp_config.num_features+1))
 	obss_mask = np.reshape(np.asarray(obss_mask), (-1, 1, chassis_dimx, chassis_dimy))
 
 	stepwise_returns = np.reshape(np.asarray(stepwise_returns), (-1, 1))  # (nSamples * nGridcells, 1)
@@ -1930,6 +1935,15 @@ def env_update(
 						metas = torch.cat((current_mx, mx), dim=0)
 				else:
 						mx = o3.unsqueeze(0)
+						p_feat = [-1, -1]
+						for key in processor_dict:
+								if key in exp_config.processor:
+									p_feat[0] = processor_dict[key]    
+									break
+						p_feat[1] = exp_config.machine.numa_node
+						grid_features_p = torch.tensor([p_feat], dtype=mx.dtype, device=mx.device)
+						
+						mx = torch.cat([mx, grid_features_p], dim=1)
 						print(mx.shape, current_mx.shape)
 						metas = torch.cat((current_mx, mx), dim=0)
 		else:
