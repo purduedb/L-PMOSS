@@ -175,7 +175,7 @@ cd=(8,12)
 nf=15
 nmf=24
 glb_exp_config = []
-for p in ["intel_skx_4s_8n", "intel_sb_4s_4n", "amd_epyc7543_2s_8n"]:
+for p in ["intel_skx_4s_8n", "amd_epyc7543_2s_8n", "amd_epyc7543_2s_2n", "intel_sb_4s_4n"]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
                         index=db_index,
@@ -304,8 +304,9 @@ mconf = GPTConfig(
 
 model = GPT(mconf, exp_config)
 # model_path = None
-# model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2024-10-23-07-27-55-0.949.pkl"
-# print(model_path)
+# model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2025-07-09-23-44-40-0.556.pkl"
+model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-00-26-49-0.802.pkl"
+print(model_path)
 
 if model_path is not None:
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))

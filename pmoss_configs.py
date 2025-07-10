@@ -53,11 +53,11 @@ class ExpConfig:
 
         self.machine = Machine(self.processor)
         vendor, cpu = self.processor.split('_', 1)
-        current_folder = os.getcwd()
+        current_folder = "/scratch/gilbreth/yrayhan"
         self.kb_path = os.path.join(current_folder + "/kbs/" + 
                                                vendor + "/" + cpu + "/" + 
                                                self.idx_kb_folder +"/"
-                                               )
+                                               )                                               
         self.save_idx = save_idx    
         self.num_global_meta_features = 24
 
