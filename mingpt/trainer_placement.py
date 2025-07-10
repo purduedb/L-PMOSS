@@ -95,9 +95,9 @@ class Trainer:
 				# states, actions, rtgs, timesteps, meta_states, benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 				self.training_step += 1
 				# place data on the correct device
-				x = x.to(self.device)  # my=> (batch, context, 8*grid*grid)
-				m_x = m_x.to(self.device)  # my=> (batch, context, 6)
-				y = y.to(self.device)  # my=> (batch, context, 1)
+				x = x.to(self.device)  # my=> (batch, context, [20]*grid*grid): State
+				m_x = m_x.to(self.device)  # my=> (batch, context, 24)
+				y = y.to(self.device)  # my=> (batch, context, 1): Action
 				r = r.to(self.device)  # my=> (batch, context, 1, 1) should be (batch, context, 1)
 				t = t.to(self.device)  # my=> (batch, context, 1)
 				b = b.to(self.device)  # my=> (batch, context, 1, 1)
@@ -106,6 +106,7 @@ class Trainer:
 				l = l.to(self.device)  # my=> (batch, context)
 				x_0 = x[0]
 				# print(x.shape, y.shape, r.shape, t.shape, m_x.shape, b.shape, st.shape, cir.shape, l.shape)
+				
 
 				
 				# forward the model
@@ -150,7 +151,7 @@ class Trainer:
 					strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 					model.eval()
 					raw_model = self.model.module if hasattr(self.model, "module") else self.model
-					save_models_dir = "/scratch/gilbreth/yrayhan/save_models/" + self.exp_config.processor + "/" + str(self.exp_config.index)
+					save_models_dir = "save_models/" + self.exp_config.processor + "/" + str(self.exp_config.index)
 					os.makedirs(save_models_dir, exist_ok=True)
 					torch.save(raw_model.state_dict(), save_models_dir+"/{}-{:.3f}.pkl".format(strftime, accs.mean()))
 					model.train()

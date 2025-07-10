@@ -175,7 +175,9 @@ cd=(8,12)
 nf=15
 nmf=24
 glb_exp_config = []
-for p in ["intel_skx_4s_8n", "amd_epyc7543_2s_8n", "amd_epyc7543_2s_2n", "intel_sb_4s_4n"]:
+for p in ["intel_skx_4s_8n", 
+# "amd_epyc7543_2s_8n", "amd_epyc7543_2s_2n", "intel_sb_4s_4n"
+]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
                         index=db_index,
@@ -303,9 +305,9 @@ mconf = GPTConfig(
     model_type="reward_conditioned", max_timestep=max(timesteps))
 
 model = GPT(mconf, exp_config)
-# model_path = None
+model_path = None
 # model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2025-07-09-23-44-40-0.556.pkl"
-model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-00-26-49-0.802.pkl"
+# model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-05-31-07-0.935.pkl"
 print(model_path)
 
 if model_path is not None:
