@@ -1729,13 +1729,15 @@ def get_state_up(action, ts, exp_config):
 		idx_array, grid_features = load_hardware_snapshot(exp_config)
 		cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
 		if not(exp_config.num_meta_features == 0):
+			if('intel' in exp_config.processor):
 				cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
 				upi_tput = np.concatenate([upi_incoming_throughput_ts, upi_outgoing_throughput_ts], axis=2) 
 				mc_tput = np.concatenate([read_channels_throughput_ts, write_channels_throughput_ts], axis=2)
 				upi_tput = np.reshape(upi_tput, (upi_tput.shape[0], -1))
 				mc_tput = np.reshape(mc_tput, (mc_tput.shape[0], -1))        
 				mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
-
+			else:
+				mc_tput = np.full((idx_array.shape[0], exp_config.num_meta_features), -1)
 
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well
@@ -1887,6 +1889,7 @@ def env_update(
 				tg_return[0] = current_rtg[-1] - st_return[len(actions)-1]
 		else:
 				print("located")
+				o1 = o1.to(numa_machine_obs_s.device)
 				numa_machine_obs_s[:, int(a)] += o1
 				tg_return[0] = current_rtg[-1] - o2
 
@@ -1913,6 +1916,10 @@ def env_update(
 		state_obs_mask = torch.tensor(state_obs_mask)
 		numa_machine_obss_mask = state_obs_mask.view(-1, chassis_dimx, chassis_dimy)
 		numa_machine_obss_mask = numa_machine_obss_mask.view(-1, chassis_dimx, chassis_dimy)
+		
+		device = numa_machine_obs.device 
+		numa_machine_obs_s = numa_machine_obs_s.to(device)
+		numa_machine_obss_mask = numa_machine_obss_mask.to(device)
 		obs_state_new = torch.cat((numa_machine_obs, numa_machine_obs_s, numa_machine_obss_mask), dim=0).unsqueeze(0)
 		
 		# print(obs_state_new.shape)
@@ -1943,11 +1950,18 @@ def env_update(
 						grid_features_p = torch.tensor([p_feat], dtype=mx.dtype, device=mx.device)
 						
 						mx = torch.cat([mx, grid_features_p], dim=1)
+						
+						device = numa_machine_obs.device 
+						mx = mx.to(device)
+						current_mx = current_mx.to(device)
 						print(mx.shape, current_mx.shape)
 						metas = torch.cat((current_mx, mx), dim=0)
 		else:
 				mx = current_mx[-1].unsqueeze(0)
 				print(mx.shape, current_mx.shape)
+				device = numa_machine_obs.device 
+				mx = mx.to(device)
+				current_mx = current_mx.to(device)
 				metas = torch.cat((current_mx, mx), dim=0)
 
 

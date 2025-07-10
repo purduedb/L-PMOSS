@@ -52,7 +52,7 @@ parser.add_argument('--wl', type=int, default=11)
 parser.add_argument('--ecfg', type=int, default=30)
 parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
-parser.add_argument('--mpath', type=str, default="save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
+parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b")
 
@@ -65,6 +65,7 @@ set_seed(args.seed)
 # rtg_scale = args.rtg                # e.g., 1.1, 1.2, ...
 # cfg_to_start_with = args.start_cfg  # necessary for inference (recent snaps)
 
+model_path = None if args.mpath == "None" else args.mpath
 
 class StateActionReturnDataset(Dataset):
 
@@ -130,8 +131,6 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-# args.is_eval_only = False
-model_path = None if args.mpath == "None" else args.mpath
 # p=args.p
 # cd=(1,1)
 # nf=-1
@@ -171,12 +170,18 @@ db_index = args.dbidx
 db_index_kb_folder = args.idxkb
 
 
+args.is_eval_only = True
+model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
+
 cd=(8,12)
 nf=15
 nmf=24
 glb_exp_config = []
-for p in ["intel_skx_4s_8n", 
-# "amd_epyc7543_2s_8n", "amd_epyc7543_2s_2n", "intel_sb_4s_4n"
+for p in [
+    # "intel_skx_4s_8n", 
+    "amd_epyc7543_2s_8n",
+    # "amd_epyc7543_2s_2n", 
+    # "intel_sb_4s_4n"
 ]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
@@ -305,10 +310,10 @@ mconf = GPTConfig(
     model_type="reward_conditioned", max_timestep=max(timesteps))
 
 model = GPT(mconf, exp_config)
-model_path = None
+# model_path = None
 # model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2025-07-09-23-44-40-0.556.pkl"
-# model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-05-31-07-0.935.pkl"
-print(model_path)
+# model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
+# print(model_path)
 
 if model_path is not None:
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
