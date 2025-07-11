@@ -151,7 +151,7 @@ class Trainer:
 					strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 					model.eval()
 					raw_model = self.model.module if hasattr(self.model, "module") else self.model
-					save_models_dir = "/scratch/gilbreth/yrayhan/save_models/" + self.exp_config.processor + "/" + str(self.exp_config.index)
+					save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
 					os.makedirs(save_models_dir, exist_ok=True)
 					torch.save(raw_model.state_dict(), save_models_dir+"/{}-{:.3f}.pkl".format(strftime, accs.mean()))
 					model.train()

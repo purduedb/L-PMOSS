@@ -178,10 +178,11 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    # "intel_skx_4s_8n", 
+    "intel_skx_4s_8n", 
     "amd_epyc7543_2s_8n",
-    # "amd_epyc7543_2s_2n", 
-    # "intel_sb_4s_4n"
+    "amd_epyc7543_2s_2n", 
+    "intel_sb_4s_4n",
+    "nvidia_gh_1s_1n",
 ]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
