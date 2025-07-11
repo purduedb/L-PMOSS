@@ -23,6 +23,7 @@ class Machine:
     self.li_ncore_dumper = hw_cfgs[2]
     self.li_worker = hw_cfgs[3]
     self.worker_to_chassis_pos_mapping  = hw_cfgs[4]
+    print(len(self.li_worker), len(self.worker_to_chassis_pos_mapping))
     assert(len(self.li_worker) == len(self.worker_to_chassis_pos_mapping))
   
   def __repr__(self):

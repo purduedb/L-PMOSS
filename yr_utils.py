@@ -53,9 +53,18 @@ def load_hardware_snapshot(exp_config):
 
 				feature_array = feature_plus_samples_array[:, :-exp_config.cnt_grid_cells]
 				feature_array = np.reshape(feature_array, (feature_array.shape[0], exp_config.cnt_grid_cells, -1))
-				feature_array = feature_array[:, :, :exp_config.num_features]
+				if "ibm" in exp_config.processor:
+					feature_array = feature_array[:, :, :-1]
+				else:
+					feature_array = feature_array[:, :, :exp_config.num_features]
 				
-				GRID_FEATURES = np.add(GRID_FEATURES, feature_array)
+				
+				if "ibm" in exp_config.processor:
+					insert_idxs = [0, 1, 4, 6, 8, 11, 12, 13, 14]
+					assert feature_array.shape[2] == len(insert_idxs)
+					GRID_FEATURES[:, :, insert_idxs] += feature_array
+				else:
+					GRID_FEATURES = np.add(GRID_FEATURES, feature_array)
 
 				samples_array = feature_plus_samples_array[:, -exp_config.cnt_grid_cells:]
 				GRID_QUERIES = np.add(GRID_QUERIES, samples_array)
