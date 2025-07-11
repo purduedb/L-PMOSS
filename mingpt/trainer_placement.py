@@ -245,7 +245,7 @@ class Trainer:
 			cir = cir.to(self.device)[0]  # circuit: my=> (batch, 768)
 			l = l.to(self.device)[0]  # where to stop in a batch: my=> (batch, context)
 		
-		print(x.shape, y.shape, r.shape, t.shape, m_x.shape, b.shape, st.shape, cir.shape, l.shape)
+		# print(x.shape, y.shape, r.shape, t.shape, m_x.shape, b.shape, st.shape, cir.shape, l.shape)
 		# zz=input()
 		self.model.train(False)
 		
@@ -313,7 +313,7 @@ class Trainer:
 		rtgs[0] = r.view(-1, )[0]  			# you set this yourself, hence it comes pre-packaged from the test set where it is set to max
 		print("Desired Return = ", rtgs)
 		print(state.shape)
-		print(meta_state.shape)
+		# print(meta_state.shape)
 		
 		
 		# ------------------------------------------------------------
@@ -372,7 +372,10 @@ class Trainer:
 			# print(state.view(-1, 8, 8, 8)[:, 0, :, :])
 			# print(meta_state.shape)
 			# print(state.view(-1, 8, 8, 8)[:, 2:6, :, :])
-			print("reward=", reward, "action=", action)
+			
+			# ===========================================>
+			# print("reward=", reward, "action=", action)
+			# ===========================================>
 			# zz = input()
 			
 			# score = get_norm_reward(reward, benchmark, benchmark_to_id[benchmark], env.placed_num_macro)

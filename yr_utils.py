@@ -1738,6 +1738,9 @@ def get_state_up(action, ts, exp_config):
 				mc_tput = np.concatenate([mc_tput, upi_tput], axis=1)
 			else:
 				mc_tput = np.full((idx_array.shape[0], exp_config.num_meta_features), -1)
+			if(mc_tput.shape[1] != exp_config.num_global_meta_features):
+				padding = np.full((mc_tput.shape[0], exp_config.num_global_meta_features-mc_tput.shape[1]), -1)
+				mc_tput = np.hstack((mc_tput, padding))
 
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well

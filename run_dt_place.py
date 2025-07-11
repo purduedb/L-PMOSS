@@ -170,8 +170,8 @@ db_index = args.dbidx
 db_index_kb_folder = args.idxkb
 
 
-args.is_eval_only = True
-model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
+# args.is_eval_only = True
+# model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
 
 cd=(8,12)
 nf=15

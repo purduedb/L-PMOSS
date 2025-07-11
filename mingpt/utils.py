@@ -9,7 +9,7 @@ from yr_utils import find_correct_max_tput
 # grid = 84
 # => my
 grid = 8
-nFeatures = 5 # 5, 23, 10
+
 
 machine = 0
 
