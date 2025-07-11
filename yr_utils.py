@@ -1858,7 +1858,7 @@ def env_update(
 		# print(numa_machine_obs.shape, numa_machine_obs_s.shape, numa_machine_obss_mask.shape)
 		# print(numa_machine_obs.view(chassis_dimx, chassis_dimy))
 		# print(numa_machine_obs_s.view(exp_config.num_features+1, chassis_dimx, chassis_dimy)[-1])
-		print(obs_mask_core)
+		# print(obs_mask_core) ===========================================>
 		# print(numa_machine_obss_mask.view(chassis_dimx, chassis_dimy))
 		# zz = input()
 
@@ -1938,9 +1938,9 @@ def env_update(
 		
 		if not(exp_config.num_meta_features == 0):
 				if o1.shape[0] == 0:
-						print(m_x.shape, current_mx.shape)
+						# print(m_x.shape, current_mx.shape)
 						mx = m_x.unsqueeze(0)
-						print(m_x.shape, current_mx.shape)
+						# print(m_x.shape, current_mx.shape)
 						metas = torch.cat((current_mx, mx), dim=0)
 				else:
 						mx = o3.unsqueeze(0)
@@ -1957,11 +1957,11 @@ def env_update(
 						device = numa_machine_obs.device 
 						mx = mx.to(device)
 						current_mx = current_mx.to(device)
-						print(mx.shape, current_mx.shape)
+						# print(mx.shape, current_mx.shape)
 						metas = torch.cat((current_mx, mx), dim=0)
 		else:
 				mx = current_mx[-1].unsqueeze(0)
-				print(mx.shape, current_mx.shape)
+				# print(mx.shape, current_mx.shape)
 				device = numa_machine_obs.device 
 				mx = mx.to(device)
 				current_mx = current_mx.to(device)
