@@ -1459,9 +1459,7 @@ def gen_token_for_all(glb_exp_config):
 			grid_features_p = np.full((mc_tput.shape[0], 1, 2), p_feat)
 			mc_tput = np.concatenate([mc_tput, grid_features_p], axis=2)
 			mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
-			mc_tput = np.repeat(mc_tput, exp_config.cnt_grid_cells, axis=1)
 			
-
 		orginal_max_tput_dset = find_correct_max_tput(exp_config) * 1.0
 		
 		# obss = []

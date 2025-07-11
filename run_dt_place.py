@@ -131,7 +131,7 @@ class StateActionReturnDataset(Dataset):
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
 print(args.is_eval_only)
-args.is_eval_only = True
+# args.is_eval_only = True
 model_path = None if args.mpath == "None" else args.mpath
 # p=args.p
 # cd=(1,1)
@@ -177,9 +177,10 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    "intel_skx_4s_8n", 
+    # "intel_skx_4s_8n", 
     # "intel_sb_4s_4n", 
-    # "amd_epyc7543_2s_8n"
+    # "amd_epyc7543_2s_8n",
+    "ibm_power_2s_2n"
     ]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
