@@ -24,8 +24,10 @@ assistant_model_intel_sb_4s_4n_v1="/scratch/gilbreth/yrayhan/save_models/intel_s
 #     --is_eval_only \
 #     --rtg 2
 # done
-wk_list=(11 12 16 44 45 13)
-sidx_list=(200 201 204 202 203 205)
+# wk_list=(11 12 16 44 45 13)
+# sidx_list=(200 201 204 202 203 205)
+wk_list=(13)
+sidx_list=(205)
 
 for i in "${!wk_list[@]}"; do
   wk=${wk_list[$i]}
