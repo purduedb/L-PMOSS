@@ -14,6 +14,8 @@ assistant_model_amd_2s8n_v2="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_
 assistant_model_intel_sb_4s_4n_v1="/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-11-17-09-47-0.985.pkl"
 
 assistant_model_intel_ice_2s_2n_v1="/scratch/gilbreth/yrayhan/save_models/intel_ice_2s_2n/0/2025-07-12-01-37-55-0.936.pkl"
+assistant_model_ibm_power_2s_2n_v1="/scratch/gilbreth/yrayhan/save_models/ibm_power_2s_2n/0/2025-07-12-03-23-52-0.903.pkl"
+assistant_model_nvidia_gh_1s_1n_v1="/scratch/gilbreth/yrayhan/save_models/nvidia_gh_1s_1n/0/2025-07-12-09-02-06-0.919.pkl"
 # Example: inference for AMD 2s8n with ? model
 # Intel SB: 4s4n
 # Intel Icelake
@@ -31,15 +33,14 @@ assistant_model_intel_ice_2s_2n_v1="/scratch/gilbreth/yrayhan/save_models/intel_
 #     --rtg 2
 # done
 
-wk_list=(12 16 44 45 13)
-# sidx_list=(200 201 204 202 203 205)
-sidx_list=(211 214 212 213 215)
+wk_list=(11 12 16 44 45 13)
+sidx_list=(210 211 214 212 213 215)
 for i in "${!wk_list[@]}"; do
   wk=${wk_list[$i]}
   sidx=${sidx_list[$i]}
 
   python run_dt_place.py \
-    --mpath "$assistant_model_intel_ice_2s_2n_v1" \
+    --mpath "$assistant_model_nvidia_gh_1s_1n_v1" \
     --wl "$wk" \
     --ecfg 100 \
     --sidx "$sidx" \

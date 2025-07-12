@@ -183,8 +183,8 @@ for p in [
     # "amd_epyc7543_2s_8n",
     # "amd_epyc7543_2s_2n", 
     # "intel_sb_4s_4n",
-    # "nvidia_gh_1s_1n",
-    "intel_ice_2s_2n",
+    "nvidia_gh_1s_1n",
+    # "intel_ice_2s_2n",
 ]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
