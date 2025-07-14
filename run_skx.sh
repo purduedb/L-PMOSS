@@ -33,14 +33,19 @@ assistant_model_nvidia_gh_1s_1n_v1="/scratch/gilbreth/yrayhan/save_models/nvidia
 #     --rtg 2
 # done
 
-wk_list=(11 12 16 44 45 13)
-sidx_list=(210 211 214 212 213 215)
+# Traditional inference for seen workloads
+# wk_list=(11 12 16 44 45 13)
+# sidx_list=(200 201 204 202 203 205)
+# Inference on Unseen 
+wk_list=(27 28)
+sidx_list=(206 207)
+
 for i in "${!wk_list[@]}"; do
   wk=${wk_list[$i]}
   sidx=${sidx_list[$i]}
 
   python run_dt_place.py \
-    --mpath "$assistant_model_nvidia_gh_1s_1n_v1" \
+    --mpath "$base_model_wo_ibm" \
     --wl "$wk" \
     --ecfg 100 \
     --sidx "$sidx" \
