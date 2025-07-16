@@ -54,7 +54,7 @@ parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
 parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 parser.add_argument('--dbidx', type=int, default=0)
-parser.add_argument('--idxkb', type=str, default="kb_b")
+parser.add_argument('--idxkb', type=str, default="kb_b__")
 
 args = parser.parse_args()
 
@@ -181,9 +181,9 @@ for p in [
     # "intel_skx_4s_8n", 
     # "ibm_power_2s_2n",
     # "amd_epyc7543_2s_8n",
-    # "amd_epyc7543_2s_2n", 
+    "amd_epyc7543_2s_2n", 
     # "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
+    # "nvidia_gh_1s_1n",
     # "intel_ice_2s_2n",
 ]:
     exp_config = ExpConfig(processor=p, 

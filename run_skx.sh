@@ -37,9 +37,14 @@ assistant_model_nvidia_gh_1s_1n_v1="/scratch/gilbreth/yrayhan/save_models/nvidia
 # wk_list=(11 12 16 44 45 13)
 # sidx_list=(200 201 204 202 203 205)
 # Inference on Unseen 
-wk_list=(27 28)
-sidx_list=(206 207)
+# wk_list=(27 28)
+# sidx_list=(206 207 208)
 
+# wk_list=(34)
+# sidx_list=(208)
+# New AMD
+wk_list=(11)
+sidx_list=(411)
 for i in "${!wk_list[@]}"; do
   wk=${wk_list[$i]}
   sidx=${sidx_list[$i]}

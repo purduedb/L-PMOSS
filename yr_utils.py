@@ -57,7 +57,7 @@ def load_hardware_snapshot(exp_config):
 					feature_array = feature_array[:, :, :-1]
 				else:
 					feature_array = feature_array[:, :, :exp_config.num_features]
-				
+					feature_array = np.nan_to_num(feature_array, neginf=0, nan=0, posinf=9999999999)
 				
 				if "ibm" in exp_config.processor:
 					insert_idxs = [0, 1, 4, 6, 8, 11, 12, 13, 14]
@@ -623,11 +623,14 @@ def gen_token_for_eval(exp_config):
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well
 		"""
-		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-				refine = [244, 245, 246, 251]
-				for _ in refine:
-						grid_features[:, _, :] = 0.00001
+				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
+				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
+				grid_features[:, slices_with_negative, :] = 0.00001
+				# refine = [244, 245, 246, 251]
+				# for _ in refine:
+				# 		grid_features[:, _, :] = 0.00001
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
 		""""""
 		scaler = StandardScaler()
@@ -879,12 +882,16 @@ def gen_token_for_eval_for_all(glb_exp_config):
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well
 		"""
-		# if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
-		# 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-		# 		refine = [244, 245, 246, 251]
-		# 		for _ in refine:
-		# 				grid_features[:, _, :] = 0.00001
-		# 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
+				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+				
+				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
+				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
+				grid_features[:, slices_with_negative, :] = 0.00001
+				# refine = [244, 245, 246, 251]
+				# for _ in refine:
+				# 		grid_features[:, _, :] = 0.00001
+				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
 		""""""
 		scaler = StandardScaler()
 		grid_features = scaler.fit_transform(grid_features)
@@ -1145,11 +1152,14 @@ def gen_token(exp_config):
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well
 		"""
-		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-				refine = [244, 245, 246, 251]
-				for _ in refine:
-						grid_features[:, _, :] = 0.00001
+				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
+				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
+				grid_features[:, slices_with_negative, :] = 0.00001
+				# refine = [244, 245, 246, 251]
+				# for _ in refine:
+				# 		grid_features[:, _, :] = 0.00001
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
 		""""""
 		scaler = StandardScaler()
@@ -1428,18 +1438,27 @@ def gen_token_for_all(glb_exp_config):
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well
 		"""
-		# if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
-		# 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-		# 		refine = [244, 245, 246, 251]
-		# 		for _ in refine:
-		# 				grid_features[:, _, :] = 0.00001
-		# 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
+				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
+				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
+				print(slices_with_negative)
+				grid_features[:, slices_with_negative, :] = 0.00001
+				# refine = [244, 245, 246, 251]
+				# for _ in refine:
+				# 		grid_features[:, _, :] = 0.00001
+				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
+
+				# arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
+				# slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
+				# print(slices_with_negative)
+				
+
 		""""""
 		scaler = StandardScaler()
 		grid_features = scaler.fit_transform(grid_features)
 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-
-
+		
 		"""
 		Add processor specific features
 		"""
@@ -1687,11 +1706,14 @@ def get_state(action, ts, exp_config):
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well
 		"""
-		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-				refine = [244, 245, 246, 251]
-				for _ in refine:
-						grid_features[:, _, :] = 0.00001
+				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
+				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
+				grid_features[:, slices_with_negative, :] = 0.00001
+				# refine = [244, 245, 246, 251]
+				# for _ in refine:
+				# 		grid_features[:, _, :] = 0.00001
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
 		""""""
 
@@ -1754,11 +1776,14 @@ def get_state_up(action, ts, exp_config):
 		"""
 		For cleaning the data in amd processors, it's a bad practice but well
 		"""
-		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n":
+		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
-				refine = [244, 245, 246, 251]
-				for _ in refine:
-						grid_features[:, _, :] = 0.00001
+				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
+				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
+				grid_features[:, slices_with_negative, :] = 0.00001
+				# refine = [244, 245, 246, 251]
+				# for _ in refine:
+				# 		grid_features[:, _, :] = 0.00001
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1))
 		""""""
 
