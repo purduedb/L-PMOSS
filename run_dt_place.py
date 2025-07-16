@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset
 from mingpt.model_placement import GPT, GPTConfig
 from mingpt.trainer_placement import Trainer, TrainerConfig
-from yr_utils import gen_token, gen_token_for_eval, gen_token_for_all, gen_token_for_eval_for_all
+from yr_utils import gen_token, gen_token_for_eval, gen_token_for_all, gen_token_for_eval_for_all, collect_stats_about_offline_dataset
 from torch.utils.data.dataloader import DataLoader
 from pmoss_configs import *
 
@@ -56,6 +56,7 @@ parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b__")
 
+# changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
@@ -179,9 +180,9 @@ nmf=24
 glb_exp_config = []
 for p in [
     # "intel_skx_4s_8n", 
-    # "ibm_power_2s_2n",
+    "ibm_power_2s_2n",
     # "amd_epyc7543_2s_8n",
-    "amd_epyc7543_2s_2n", 
+    # "amd_epyc7543_2s_2n", 
     # "intel_sb_4s_4n",
     # "nvidia_gh_1s_1n",
     # "intel_ice_2s_2n",
@@ -203,6 +204,10 @@ for p in [
                         save_idx = save_idx,
                        )
     glb_exp_config.append(exp_config)
+
+# collect_stats_about_offline_dataset(glb_exp_config)
+
+
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
     = gen_token_for_all(glb_exp_config)
 

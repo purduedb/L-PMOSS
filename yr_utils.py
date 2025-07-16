@@ -8,6 +8,8 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
 import copy
 import os 
 from pmoss_configs import processor_dict
+from collections import Counter
+
 def load_edge_index(cGridCell):
 		if machine == 0:
 				sample_array = np.loadtxt("/home/yrayhan/works/lpmoss/kb_b/" + str(CPUID[0]) + "/query_view.txt")
@@ -625,6 +627,17 @@ def gen_token_for_eval(exp_config):
 		"""
 		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+				
+				if exp_config.processor == "amd_epyc7543_2s_8n":
+					# Replace NaNs with 0
+					np.nan_to_num(grid_features, copy=False, nan=0.00001)
+					# Replace inf and -inf with 0
+					grid_features[np.isinf(grid_features)] = 0.00001
+					# Zero out values close to 0 (subnormal values)
+					threshold = 1e-8
+					grid_features[np.abs(grid_features) < threshold] = 0.00001
+					grid_features = np.clip(grid_features, -1e10, 1e10)  # You can adjust this threshold
+					
 				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
 				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
 				grid_features[:, slices_with_negative, :] = 0.00001
@@ -885,6 +898,16 @@ def gen_token_for_eval_for_all(glb_exp_config):
 		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
 				
+				if exp_config.processor == "amd_epyc7543_2s_8n":
+					# Replace NaNs with 0
+					np.nan_to_num(grid_features, copy=False, nan=0.00001)
+					# Replace inf and -inf with 0
+					grid_features[np.isinf(grid_features)] = 0.00001
+					# Zero out values close to 0 (subnormal values)
+					threshold = 1e-8
+					grid_features[np.abs(grid_features) < threshold] = 0.00001
+					grid_features = np.clip(grid_features, -1e10, 1e10)  # You can adjust this threshold
+					# 
 				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
 				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
 				grid_features[:, slices_with_negative, :] = 0.00001
@@ -1154,6 +1177,17 @@ def gen_token(exp_config):
 		"""
 		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+				
+				if exp_config.processor == "amd_epyc7543_2s_8n":
+					# Replace NaNs with 0
+					np.nan_to_num(grid_features, copy=False, nan=0.00001)
+					# Replace inf and -inf with 0
+					grid_features[np.isinf(grid_features)] = 0.00001
+					# Zero out values close to 0 (subnormal values)
+					threshold = 1e-8
+					grid_features[np.abs(grid_features) < threshold] = 0.00001
+					grid_features = np.clip(grid_features, -1e10, 1e10)  # You can adjust this threshold
+					#
 				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
 				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
 				grid_features[:, slices_with_negative, :] = 0.00001
@@ -1440,10 +1474,22 @@ def gen_token_for_all(glb_exp_config):
 		"""
 		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+
+				if exp_config.processor == "amd_epyc7543_2s_8n":
+					# Replace NaNs with 0
+					np.nan_to_num(grid_features, copy=False, nan=0.00001)
+					# Replace inf and -inf with 0
+					grid_features[np.isinf(grid_features)] = 0.00001
+					# Zero out values close to 0 (subnormal values)
+					threshold = 1e-8
+					grid_features[np.abs(grid_features) < threshold] = 0.00001
+					grid_features = np.clip(grid_features, -1e10, 1e10)  # You can adjust this threshold
+
 				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
 				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
 				print(slices_with_negative)
 				grid_features[:, slices_with_negative, :] = 0.00001
+
 				# refine = [244, 245, 246, 251]
 				# for _ in refine:
 				# 		grid_features[:, _, :] = 0.00001
@@ -1453,8 +1499,9 @@ def gen_token_for_all(glb_exp_config):
 				# slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
 				# print(slices_with_negative)
 				
-
+		
 		""""""
+
 		scaler = StandardScaler()
 		grid_features = scaler.fit_transform(grid_features)
 		grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
@@ -1708,6 +1755,17 @@ def get_state(action, ts, exp_config):
 		"""
 		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+				
+				if exp_config.processor == "amd_epyc7543_2s_8n":
+					# Replace NaNs with 0
+					np.nan_to_num(grid_features, copy=False, nan=0.00001)
+					# Replace inf and -inf with 0
+					grid_features[np.isinf(grid_features)] = 0.00001
+					# Zero out values close to 0 (subnormal values)
+					threshold = 1e-8
+					grid_features[np.abs(grid_features) < threshold] = 0.00001
+					grid_features = np.clip(grid_features, -1e10, 1e10)  # You can adjust this threshold
+				
 				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
 				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
 				grid_features[:, slices_with_negative, :] = 0.00001
@@ -1778,6 +1836,17 @@ def get_state_up(action, ts, exp_config):
 		"""
 		if exp_config.processor == "amd_epyc7543_2s_2n" or exp_config.processor == "amd_epyc7543_2s_8n" or exp_config.processor == "ibm_power_2s_2n":
 				grid_features = np.reshape(grid_features, (grid_features.shape[0], -1, exp_config.num_features))
+				
+				if exp_config.processor == "amd_epyc7543_2s_8n":
+					# Replace NaNs with 0
+					np.nan_to_num(grid_features, copy=False, nan=0.00001)
+					# Replace inf and -inf with 0
+					grid_features[np.isinf(grid_features)] = 0.00001
+					# Zero out values close to 0 (subnormal values)
+					threshold = 1e-8
+					grid_features[np.abs(grid_features) < threshold] = 0.00001
+					grid_features = np.clip(grid_features, -1e10, 1e10)  # You can adjust this threshold
+					# 
 				arr_sum = grid_features.sum(axis=0)  # shape: (256, 15)
 				slices_with_negative = np.where((arr_sum < 0).any(axis=1))[0]  # shape: (num_bad_slices,)
 				grid_features[:, slices_with_negative, :] = 0.00001
@@ -2008,3 +2077,70 @@ def env_update(
 		return obs_state, rtgs, done, metas, obs_mask_core
 
 
+def categorize(val):
+	if 30 <= val <= 39:
+		return 'G'
+	elif 40 <= val <= 49:
+		return 'M'
+	elif val == 49 or val == 50:
+		return 'S'
+	else:
+		return 'R'
+
+def collect_stats_about_offline_dataset(glb_exp_config):
+	obss = []
+	obss_s = []
+	obss_mask = []
+	actions = []
+	stepwise_returns = []
+	rtgs = []
+	done_idxs = []
+	timesteps = []
+	metas = []
+	actions_ = []
+	
+	total_samples = 0
+	for exp_config in glb_exp_config:		
+		# (tr, 2) (tr, nGridCells, nFeatures) (tr, 100, 5)
+		idx_array, grid_features = load_hardware_snapshot(exp_config) # hardware snapshot + grid index 
+		# print(idx_array.shape, grid_features.shape)
+		
+		pairs = [tuple(row) for row in idx_array[:, [2]]]
+		# Count each unique pair
+		pair_counts = Counter(pairs)
+		print("==============================================================================")
+		total = sum(pair_counts.values())
+		total_samples += total
+	
+	# Group them by scheduling policies
+	for exp_config in glb_exp_config:		
+		# (tr, 2) (tr, nGridCells, nFeatures) (tr, 100, 5)
+		idx_array, grid_features = load_hardware_snapshot(exp_config) # hardware snapshot + grid index 
+		index_0_values = idx_array[:, 0]
+		
+		# Map and count
+		grouped = [categorize(v) for v in index_0_values]
+		counts = Counter(grouped)
+
+		print("==============================================================================")
+		print(exp_config.processor, total/total_samples * 100, "%")
+		# Print result
+		for group in ['G', 'M', 'S', 'R']:
+			print(group, counts[group] / total_samples * 100, "%")
+
+	exit(0)
+	# Group them by workload 
+	for exp_config in glb_exp_config:		
+		# (tr, 2) (tr, nGridCells, nFeatures) (tr, 100, 5)
+		idx_array, grid_features = load_hardware_snapshot(exp_config) # hardware snapshot + grid index 
+		# print(idx_array.shape, grid_features.shape)
+		
+		pairs = [tuple(row) for row in idx_array[:, [2]]]
+		# Count each unique pair
+		pair_counts = Counter(pairs)
+		print("==============================================================================")
+		total = sum(pair_counts.values())
+		print(exp_config.processor, total/total_samples * 100, "%")
+		# Print the results
+		for pair, count in pair_counts.items():
+			print(pair, count/total_samples * 100, "%")
