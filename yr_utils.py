@@ -12,17 +12,17 @@ from collections import Counter
 
 def load_edge_index(cGridCell):
 		if machine == 0:
-				sample_array = np.loadtxt("/home/yrayhan/works/lpmoss/kb_b/" + str(CPUID[0]) + "/query_view.txt")
+				sample_array = np.loadtxt("/home/xxxxxxxxxx/works/lpmoss/kb_b/" + str(CPUID[0]) + "/query_view.txt")
 		else:
-				sample_array = np.loadtxt("/home/yrayhan/works/lpmoss/kb_icelake_quad/" + str(CPUID[0]) + "/query_view.txt")
+				sample_array = np.loadtxt("/home/xxxxxxxxxx/works/lpmoss/kb_icelake_quad/" + str(CPUID[0]) + "/query_view.txt")
 		edge_indexes = [[] for _ in range(sample_array.shape[0])]
 		edge_indexes_w = [[] for _ in range(sample_array.shape[0])]
 
 		for _ in CPUID:
 				if machine == 0:
-						RAW_FILE = "/home/yrayhan/works/lpmoss/kb_b/" + str(_) + "/query_view.txt"
+						RAW_FILE = "/home/xxxxxxxxxx/works/lpmoss/kb_b/" + str(_) + "/query_view.txt"
 				else:
-						RAW_FILE = "/home/yrayhan/works/lpmoss/kb_icelake_quad/" + str(_) + "/query_view.txt"
+						RAW_FILE = "/home/xxxxxxxxxx/works/lpmoss/kb_icelake_quad/" + str(_) + "/query_view.txt"
 				raw_array = np.loadtxt(RAW_FILE)
 				idx_array = raw_array[:, 0:2]
 				qCorr_array = np.reshape(raw_array[:, 2:], (raw_array.shape[0], cGridCell, cGridCell))
@@ -386,7 +386,7 @@ def load_machine_adjacency():
 		edge_indexes = []
 		edge_indexes_w = []
 
-		RAW_FILE = "/home/yrayhan/works/lpmoss/machine_configs/raw_config.txt"
+		RAW_FILE = "/home/xxxxxxxxxx/works/lpmoss/machine_configs/raw_config.txt"
 		raw_array = np.loadtxt(RAW_FILE)
 		for _ in range(raw_array.shape[0]):
 				indexes = np.where(raw_array[_] > 0)
@@ -566,7 +566,7 @@ def retrieve_config(exp_config, out_actions, cfg_idx):
 
 def sth(cfg_idx):
 		# cfg = np.loadtxt("machine_configs/config_" + str(cfg_idx) + ".txt")[10:]
-		cfg = np.loadtxt("/home/yrayhan/works/lpmoss/machine_configs/config_" + str(cfg_idx) + ".txt")[10:]
+		cfg = np.loadtxt("/home/xxxxxxxxxx/works/lpmoss/machine_configs/config_" + str(cfg_idx) + ".txt")[10:]
 		cfg = np.reshape(cfg, (-1, ))
 		unique, counts = np.unique(cfg, return_counts=True)
 		d = dict(zip(unique, counts))

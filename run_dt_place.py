@@ -52,7 +52,7 @@ parser.add_argument('--wl', type=int, default=11)
 parser.add_argument('--ecfg', type=int, default=30)
 parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
-parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
+parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/xxxxxxxxxx/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b__")
 
@@ -172,7 +172,7 @@ db_index_kb_folder = args.idxkb
 
 
 # args.is_eval_only = True
-# model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
+# model_path = "/scratch/gilbreth/xxxxxxxxxx/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
 
 cd=(8,12)
 nf=15
@@ -320,7 +320,7 @@ mconf = GPTConfig(
 model = GPT(mconf, exp_config)
 # model_path = None
 # model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2025-07-09-23-44-40-0.556.pkl"
-# model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
+# model_path = "/scratch/gilbreth/xxxxxxxxxx/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
 # print(model_path)
 
 if model_path is not None:

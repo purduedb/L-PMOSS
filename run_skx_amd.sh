@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Define model paths as variables
-base_model_wo_nvidia_ibm="/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
-base_model_wo_ibm="/users/yrayhan/works/L-PMOSS/base_models/2025-07-11-12-17-34-0.912.pkl"
-base_model_w_ibm="/scratch/gilbreth/yrayhan/save_models/base_models/0/2025-07-11-16-10-07-0.820.pkl"
+base_model_wo_nvidia_ibm="/scratch/gilbreth/xxxxxxxxxx/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
+base_model_wo_ibm="/users/xxxxxxxxxx/works/L-PMOSS/base_models/2025-07-11-12-17-34-0.912.pkl"
+base_model_w_ibm="/scratch/gilbreth/xxxxxxxxxx/save_models/base_models/0/2025-07-11-16-10-07-0.820.pkl"
 
-assistant_model_amd_2s8n_v1="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2025-07-10-22-14-09-0.977.pkl"
-assistant_model_amd_2s8n_v2="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2025-07-11-00-39-15-0.979.pkl"
+assistant_model_amd_2s8n_v1="/scratch/gilbreth/xxxxxxxxxx/save_models/amd_epyc7543_2s_8n/0/2025-07-10-22-14-09-0.977.pkl"
+assistant_model_amd_2s8n_v2="/scratch/gilbreth/xxxxxxxxxx/save_models/amd_epyc7543_2s_8n/0/2025-07-11-00-39-15-0.979.pkl"
 
-assistant_model_intel_sb_4s_4n_v1="/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-11-17-09-47-0.985.pkl"
+assistant_model_intel_sb_4s_4n_v1="/scratch/gilbreth/xxxxxxxxxx/save_models/intel_sb_4s_4n/0/2025-07-11-17-09-47-0.985.pkl"
 
 # Example: inference for AMD 2s8n with ? model
 # Intel SB: 

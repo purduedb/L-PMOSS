@@ -13,7 +13,7 @@ amd_epyc7543_2s_2n 1372
 (np.float64(45.0),) 154
 (np.float64(16.0),) 315
 (np.float64(13.0),) 182
-yrayhan@gilbreth-fe01:[L-PMOSS] $ ./run_skx.sh
+xxxxxxxxxx@gilbreth-fe01:[L-PMOSS] $ ./run_skx.sh
 CUDA_VISIBLE_DEVICES: 0
 2.4.0
 12.4
@@ -71,17 +71,17 @@ nvidia_gh_1s_1n 1099
 (np.float64(12.0),) 210
 (np.float64(16.0),) 217
 (np.float64(13.0),) 140
-yrayhan@gilbreth-fe01:[L-PMOSS] $ ./run_skx.sh
+xxxxxxxxxx@gilbreth-fe01:[L-PMOSS] $ ./run_skx.sh
 Traceback (most recent call last):
-  File "/home/yrayhan/works/L-PMOSS/run_dt_place.py", line 4, in <module>
+  File "/home/xxxxxxxxxx/works/L-PMOSS/run_dt_place.py", line 4, in <module>
     from mingpt.utils import set_seed
-  File "/home/yrayhan/works/L-PMOSS/mingpt/utils.py", line 7, in <module>
+  File "/home/xxxxxxxxxx/works/L-PMOSS/mingpt/utils.py", line 7, in <module>
     from yr_utils import find_correct_max_tput
-  File "/home/yrayhan/works/L-PMOSS/yr_utils.py", line 2025
+  File "/home/xxxxxxxxxx/works/L-PMOSS/yr_utils.py", line 2025
     int total_samples = 0
         ^^^^^^^^^^^^^
 SyntaxError: invalid syntax
-yrayhan@gilbreth-fe01:[L-PMOSS] $ ./run_skx.sh
+xxxxxxxxxx@gilbreth-fe01:[L-PMOSS] $ ./run_skx.sh
 CUDA_VISIBLE_DEVICES: 0
 2.4.0
 12.4
