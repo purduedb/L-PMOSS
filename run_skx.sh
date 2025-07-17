@@ -43,8 +43,8 @@ assistant_model_nvidia_gh_1s_1n_v1="/scratch/gilbreth/yrayhan/save_models/nvidia
 # wk_list=(34)
 # sidx_list=(208)
 # New AMD
-wk_list=(45 16)
-sidx_list=(413 404)
+wk_list=(45)
+sidx_list=(423)
 for i in "${!wk_list[@]}"; do
   wk=${wk_list[$i]}
   sidx=${sidx_list[$i]}
@@ -52,7 +52,7 @@ for i in "${!wk_list[@]}"; do
   python run_dt_place.py \
     --mpath "$base_model_wo_ibm" \
     --wl "$wk" \
-    --ecfg 100 \
+    --ecfg 413 \
     --sidx "$sidx" \
     --is_eval_only \
     --rtg 2

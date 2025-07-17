@@ -186,13 +186,15 @@ class Trainer:
 			# plt.cla()
 			tmp_y_1 = []
 			for level in [0]:
+				start = time.perf_counter()
 				print("//------------------------------------------------")
 				level /= 100.0
 				actions = self.get_returns(level, self.test_dataset)
 				"""actions here are hw positions of the workers"""
 				retrieve_config(self.exp_config, actions, self.exp_config.save_idx)
 				print("REFINE ACTION")
-				
+				end = time.perf_counter()
+				print(f"Execution time: {end - start:.6f} seconds")
 			print("=====================ALL DONE!=====================")
 			return 
 
@@ -268,6 +270,8 @@ class Trainer:
 		num_features = self.exp_config.num_features+1  # 1 to accound for grid index: 0, 1, 2, ...
 		bound_core = int(self.exp_config.cnt_grid_cells / self.exp_config.machine.num_worker)+1
 		
+		start = time.perf_counter()
+		
 		print("// loop: repeat number ---------------------------------------------------------------------------")
 		# The very first observation:
 		# state, reward_sum, done, meta_state = env.reset()
@@ -316,8 +320,9 @@ class Trainer:
 		
 		rtgs = [ret]  						# = [0]
 		rtgs[0] = r.view(-1, )[0]  			# you set this yourself, hence it comes pre-packaged from the test set where it is set to max
-		print("Desired Return = ", rtgs)
-		print(state.shape)
+		#INFERENCE ============================================================================================================================================================>
+		# print("Desired Return = ", rtgs)
+		# print(state.shape)
 		# print(meta_state.shape)
 		
 		
@@ -338,18 +343,22 @@ class Trainer:
 		all_states = state.type(torch.float32)
 		all_meta_states = meta_state.type(torch.float32)
 		actions = []
-		print(all_states.shape, all_meta_states.shape)
+		#INFERENCE ============================================================================================================================================================>
+		# print(all_states.shape, all_meta_states.shape)
 		
 		while True:
 			if done:
 				score_sum = 0
 			
+			# INFERENCE ============================================================================================================================================================>
 			action = sampled_action.cpu().numpy()[0,-1]
+			
 			if isinstance(action, int):
 				actions += [action]
 			else:
 				actions += [action.item()]
-			print(actions)
+			# INFERENCE ============================================================================================================================================================>
+			# print(actions)
 			
 			if(len(actions) == self.exp_config.cnt_grid_cells): 
 				# print(actions)
@@ -359,7 +368,8 @@ class Trainer:
 			# ================
 			# update the state and every other stuff now that you have seen the action
 			# state, reward, done, meta_state = env.step(action)
-			print("------------------------------------------------------------")
+			# INFERENCE ============================================================================================================================================================>	
+			# print("------------------------------------------------------------")
 			
 			# state, reward, done, meta_state = my_env_step(x, m_x, r, actions, self.assuming_cfg_idx)
 			# state, reward, done, meta_state = my_env_step_new(x, m_x, st, actions, self.assuming_cfg_idx)
@@ -422,3 +432,6 @@ class Trainer:
 				stepwise_returns = None,
 				circuit_feas = circuit_feas_for_benchmark.to(self.device),
 				is_random_shuffle = is_shuffle_benchmark_id)
+
+		end = time.perf_counter()
+		print(f"Execution time: {end - start:.6f} seconds")

@@ -192,8 +192,9 @@ def find_correct_max_tput_for_wl(exp_config):
 		
 		maxCfg = valid_cfgs[mIdx]
 		maxIdx = valid_idxs[mIdx]    
-		print("MAXCONFIG =", maxCfg, "MAXIDX=", maxIdx)
-		print(max_tput)
+		# INFERENCE====================================================================================================================>
+		# print("MAXCONFIG =", maxCfg, "MAXIDX=", maxIdx)
+		# print(max_tput)
 		return max_tput
 
 
@@ -1905,11 +1906,13 @@ def get_state_up(action, ts, exp_config):
 		ret_meta_state = mc_tput[ret_idx[0]][:, ts, :]
 		ret_meta_state = np.average(ret_meta_state, axis=0)
 		ret_meta_state = torch.tensor(ret_meta_state, dtype=torch.float32)
-		print(ret_meta_state.dtype)
+		# INFERENCE====================================================================================================================>
+		# print(ret_meta_state.dtype)
 		# print(ret_query_tput)
 		
 		# ret_query_tput = torch.tensor(ret_query_tput)
-		print(ret_state.shape, ret_meta_state.shape)
+		# INFERENCE====================================================================================================================>
+		# print(ret_state.shape, ret_meta_state.shape)
 		
 		return ret_state, ret_query_tput, ret_meta_state
 
@@ -1990,11 +1993,13 @@ def env_update(
 				o1, o2 = get_state(actions[-1], len(actions)-1, exp_config)
 		
 		if o1.shape[0] == 0:
-				print("Not Located!")
+				# INFERENCE====================================================================================================================>
+				# print("Not Located!")
 				numa_machine_obs_s[:, int(a)] += copy.deepcopy(seen_obss_s[:, seen_a_])
 				tg_return[0] = current_rtg[-1] - st_return[len(actions)-1]
 		else:
-				print("located")
+				# INFERENCE====================================================================================================================>
+				# print("located")
 				o1 = o1.to(numa_machine_obs_s.device)
 				numa_machine_obs_s[:, int(a)] += o1
 				tg_return[0] = current_rtg[-1] - o2

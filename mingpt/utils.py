@@ -191,7 +191,8 @@ def infer_action(model, x, steps, exp_config, temperature=1.0, sample=False, top
     has quadratic complexity unlike an RNN that is only linear, and has a finite context window
     of block_size, unlike an RNN that has an infinite context window.
     """
-    print("============================================================================================================================================================")
+    # INFERENCE ============================================================================================================================================================>
+    # print("============================================================================================================================================================")
     # inp = input()
     num_features = exp_config.num_features
     chassis_dimx = exp_config.chassis_dim[0]
@@ -205,11 +206,13 @@ def infer_action(model, x, steps, exp_config, temperature=1.0, sample=False, top
 
 
     for k in range(steps):  # you always take a single step 
-        print("===========")
+        # INFERENCE ============================================================================================================================================================>
+        # print("===========")
         x_cond = x if x.size(1) <= block_size//3 else x[:, -block_size//3:] # crop context if needed
         x_cond = x_cond.to(torch.float32)
         
-        print(x_cond.shape)
+        # INFERENCE ============================================================================================================================================================>
+        # print(x_cond.shape)
         
         if actions is not None:
             if not torch.is_tensor(actions):
