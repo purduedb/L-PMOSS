@@ -63,7 +63,7 @@ L-PMOSS
 ├── run_dt_place.py            # The entry-point
 ├── pmoss_configs.py           # Logic for representing servers and different workload and sever 
                                  mappings
-├── ...                
+...                
 ```
 
 
