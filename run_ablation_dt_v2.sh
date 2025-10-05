@@ -6,11 +6,11 @@ conda activate pmoss
 # Define model paths as variables
 # The default base model with default DT setting
 default_base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/base_models/0/2025-07-11-12-17-34-0.912.pkl"
-current_base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/nl_2/0/2025-10-05-01-18-11-0.677.pkl"
+current_base_model_wo_ibm="None"
 
-num_layer=(2)
+num_layer=(4) # default is 6
 num_heads=(2 4 6)
-embed_size=(32 64 256)
+embed_size=(16 32 64)
 
 
 for i in "${!num_layer[@]}"; do

@@ -54,7 +54,10 @@ parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
 parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 parser.add_argument('--dbidx', type=int, default=0)
-parser.add_argument('--idxkb', type=str, default="kb_b__")
+parser.add_argument('--idxkb', type=str, default="kb_b")  # kb_b__ was for amd with the fsanitizer stuff
+parser.add_argument('--ablation_study', action='store_true', help='Enable ablation study mode')
+parser.add_argument('--ablation_param', type=str, choices=['num_layer', 'num_head', 'num_embedding'], 
+                   help='Which parameter to ablate (num_layer, num_head, num_embedding)')
 parser.add_argument('--n_layer', type=int, default=6, help='Number of transformer layers')
 parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
 parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
@@ -205,6 +208,11 @@ for p in [
                         eval_start_cfg=eval_start_cfg,
                         idx_kb_folder=db_index_kb_folder,
                         save_idx = save_idx,
+                        ablation_study = args.ablation_study,
+                        ablation_param = args.ablation_param,
+                        n_layer = args.n_layer,
+                        n_head = args.n_head,
+                        n_embd = args.n_embd,
                        )
     glb_exp_config.append(exp_config)
 
