@@ -55,6 +55,9 @@ parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
 parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b__")
+parser.add_argument('--n_layer', type=int, default=6, help='Number of transformer layers')
+parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
+parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
 
 # changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
@@ -179,12 +182,12 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    # "intel_skx_4s_8n", 
-    # "ibm_power_2s_2n",
+    "intel_skx_4s_8n", 
     "amd_epyc7543_2s_8n",
-    # "amd_epyc7543_2s_2n", 
-    # "intel_sb_4s_4n",
-    # "nvidia_gh_1s_1n",
+    "amd_epyc7543_2s_2n", 
+    "intel_sb_4s_4n",
+    "nvidia_gh_1s_1n",
+    # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
     exp_config = ExpConfig(processor=p, 
@@ -314,7 +317,7 @@ test_dataset = StateActionReturnDataset(
 
 # Model tuning 
 mconf = GPTConfig(
-    train_dataset.vocab_size, train_dataset.block_size, n_layer=6, n_head=8, n_embd=128, 
+    train_dataset.vocab_size, train_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
     model_type="reward_conditioned", max_timestep=max(timesteps))
 
 model = GPT(mconf, exp_config)
