@@ -58,6 +58,8 @@ parser.add_argument('--idxkb', type=str, default="kb_b")  # kb_b__ was for amd w
 parser.add_argument('--ablation_study', action='store_true', help='Enable ablation study mode')
 parser.add_argument('--ablation_param', type=str, choices=['num_layer', 'num_head', 'num_embedding'], 
                    help='Which parameter to ablate (num_layer, num_head, num_embedding)')
+parser.add_argument('--generalization_study', action='store_true', help='Enable generalization study mode')
+parser.add_argument('--exclude_machine', type=str, help='Machine to exclude from training for generalization study')
 parser.add_argument('--n_layer', type=int, default=6, help='Number of transformer layers')
 parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
 parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
@@ -186,10 +188,10 @@ nmf=24
 glb_exp_config = []
 for p in [
     "intel_skx_4s_8n", 
-    "amd_epyc7543_2s_8n",
-    "amd_epyc7543_2s_2n", 
-    "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
+    # "amd_epyc7543_2s_8n",
+    # "amd_epyc7543_2s_2n", 
+    # "intel_sb_4s_4n",
+    # "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -210,6 +212,8 @@ for p in [
                         save_idx = save_idx,
                         ablation_study = args.ablation_study,
                         ablation_param = args.ablation_param,
+                        generalization_study = args.generalization_study,
+                        exclude_machine = args.exclude_machine,
                         n_layer = args.n_layer,
                         n_head = args.n_head,
                         n_embd = args.n_embd,
