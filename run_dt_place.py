@@ -62,7 +62,9 @@ parser.add_argument('--generalization_study', action='store_true', help='Enable 
 parser.add_argument('--exclude_machine', type=str, help='Machine to exclude from training for generalization study')
 parser.add_argument('--n_layer', type=int, default=6, help='Number of transformer layers')
 parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
+
 parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
+parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 
 # changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
@@ -187,11 +189,11 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    "intel_skx_4s_8n", 
+    # "intel_skx_4s_8n", 
     # "amd_epyc7543_2s_8n",
     # "amd_epyc7543_2s_2n", 
     # "intel_sb_4s_4n",
-    # "nvidia_gh_1s_1n",
+    "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -328,9 +330,10 @@ test_dataset = StateActionReturnDataset(
 
 
 # Model tuning 
+model_type = args.model_type
 mconf = GPTConfig(
     train_dataset.vocab_size, train_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
-    model_type="reward_conditioned", max_timestep=max(timesteps))
+    model_type=model_type, max_timestep=max(timesteps))
 
 model = GPT(mconf, exp_config)
 # model_path = None
@@ -354,10 +357,11 @@ epochs = args.epochs
 
 
 
+    
 tconf = TrainerConfig(
     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
     lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(train_dataset)*args.context_length*3,
-    num_workers=1, seed=args.seed, model_type="reward_conditioned", max_timestep=max(timesteps),
+    num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps),
     draw_placement = True, is_eval_only = args.is_eval_only,
     test_all_macro = args.test_all_macro)
 print("trainerconfig finish")

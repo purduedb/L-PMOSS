@@ -5,3 +5,4 @@ __pycache__/*
 mingpt/__pycache__/*
 *.pyc
 base_models/*
+d3rlpy_logs/

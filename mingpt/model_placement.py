@@ -383,9 +383,19 @@ class GPT(nn.Module):
             token_embeddings[:,1::2,:] = state_embeddings # really just [:,1,:]
         
         elif actions is not None and self.model_type == 'naive':
-            assert False
+            # assert False
+            # action_embeddings = self.action_embeddings(actions.type(torch.long).squeeze(-1)) # (batch, block_size, n_embd)
+            action_embeddings = self.action_embeddings_s(actions.type(torch.long).squeeze(-1))  # (batch, context, n_Embedding)
+
+            # token_embeddings = torch.zeros((states.shape[0], states.shape[1]*2 - int(targets is None), self.config.n_embd), dtype=torch.float32, device=state_embeddings.device)
+            token_embeddings = torch.zeros((states.shape[0], states.shape[1]*2 - int(targets is None), self.config.n_embd), dtype=torch.float32, device=state_embeddings.device)
+            
+            token_embeddings[:,::2,:] = state_embeddings
+            token_embeddings[:,1::2,:] = action_embeddings[:,-states.shape[1] + int(targets is None):,:]
+            
         elif actions is None and self.model_type == 'naive': # only happens at very first timestep of evaluation
-            assert False
+            # assert False
+            token_embeddings = state_embeddings
         else:
             raise NotImplementedError()
 
@@ -404,10 +414,10 @@ class GPT(nn.Module):
             logits = logits[:, 1:, :]
             
         elif actions is not None and self.model_type == 'naive':
-            print("ENTERED HERE ASSERTION ERROR!-------------------------------------------------------------------------------------")
+            # print("ENTERED HERE ASSERTION ERROR!-------------------------------------------------------------------------------------")
             logits = logits[:, ::2, :] # only keep predictions from state_embeddings
         elif actions is None and self.model_type == 'naive':
-            print("ENTERED HERE ASSERTION ERROR!-------------------------------------------------------------------------------------")
+            # print("ENTERED HERE ASSERTION ERROR!-------------------------------------------------------------------------------------")
             logits = logits # for completeness
         else:
             raise NotImplementedError()

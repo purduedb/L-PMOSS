@@ -151,23 +151,30 @@ class Trainer:
 					strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 					model.eval()
 					raw_model = self.model.module if hasattr(self.model, "module") else self.model
-					
+
 					# For saving assistant models
 					# save_models_dir = "/scratch/gilbreth/yrayhan/save_models/" + self.exp_config.processor + "/" + str(self.exp_config.index)
-					
+
 					# For saving base models
-					if self.exp_config.generalization_study:
-						save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/base_models/{self.exp_config.exclude_machine}/{self.exp_config.index}"
-					elif self.exp_config.ablation_study:
-						if self.exp_config.ablation_param == 'num_layer':
-							save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nl_{self.exp_config.n_layer}/{self.exp_config.index}"
-						elif self.exp_config.ablation_param == 'num_head':
-							save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nh_{self.exp_config.n_head}/{self.exp_config.index}"
-						elif self.exp_config.ablation_param == 'num_embedding':
-							save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/ne_{self.exp_config.n_embd}/{self.exp_config.index}"
-					else:
-						save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
+					model_type = getattr(self.model, 'model_type', None)
+					if model_type is None and hasattr(self.model, 'module'):
+						model_type = getattr(self.model.module, 'model_type', None)
 					
+					if model_type == 'reward_conditioned':
+						if self.exp_config.generalization_study:
+							save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/base_models/{self.exp_config.exclude_machine}/{self.exp_config.index}"
+						elif self.exp_config.ablation_study:
+							if self.exp_config.ablation_param == 'num_layer':
+								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nl_{self.exp_config.n_layer}/{self.exp_config.index}"
+							elif self.exp_config.ablation_param == 'num_head':
+								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nh_{self.exp_config.n_head}/{self.exp_config.index}"
+							elif self.exp_config.ablation_param == 'num_embedding':
+								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/ne_{self.exp_config.n_embd}/{self.exp_config.index}"
+						else:
+							save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
+					else:
+						save_models_dir = "/scratch/gilbreth/yrayhan/save_models/bc_models/" + str(self.exp_config.index)
+
 					os.makedirs(save_models_dir, exist_ok=True)
 					torch.save(raw_model.state_dict(), save_models_dir+"/{}-{:.3f}.pkl".format(strftime, accs.mean()))
 					model.train()
@@ -211,6 +218,7 @@ class Trainer:
 
 		for epoch in range(config.max_epochs):
 			run_epoch('train', epoch_num=epoch)
+			
 			if (epoch + 1) % 400 == 0:
 				if self.config.model_type == 'naive':
 					assert False
@@ -329,8 +337,19 @@ class Trainer:
 		state = state.type(torch.float32).to(self.device).unsqueeze(0)
 		meta_state = meta_state.type(torch.float32).to(self.device).unsqueeze(0)
 		
-		rtgs = [ret]  						# = [0]
-		rtgs[0] = r.view(-1, )[0]  			# you set this yourself, hence it comes pre-packaged from the test set where it is set to max
+		# Detect model type for inference behavior
+		is_naive = getattr(self.model, 'model_type', None) == 'naive'
+		if is_naive is None and hasattr(self.model, 'module'):
+			is_naive = getattr(self.model.module, 'model_type', None) == 'naive'
+			
+		if is_naive:
+			# For naive/BC models: RTG is not used, set to 0
+			rtgs = [0.0]
+		else:
+			# For reward_conditioned/DT models: use the target return
+			rtgs = [ret]  						# = [0]
+			rtgs[0] = r.view(-1, )[0]  			# you set this yourself, hence it comes pre-packaged from the test set where it is set to max
+			
 		#INFERENCE ============================================================================================================================================================>
 		# print("Desired Return = ", rtgs)
 		# print(state.shape)
@@ -423,7 +442,12 @@ class Trainer:
 			# all_meta_states = torch.cat([all_meta_states, meta_state], dim=0)
 			# rtgs += [rtgs[-1] - score]
 			
-			rtgs = reward.tolist()
+			if is_naive:
+				# For naive/BC: RTG stays constant (not used)
+				rtgs = [0.0] * len(actions)  # BC doesn't update RTG
+			else:
+				# For reward_conditioned/DT: update RTG based on reward
+				rtgs = reward.tolist()
 
 			# print(state.shape)
 			# print(reward.shape)
