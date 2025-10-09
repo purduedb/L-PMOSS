@@ -5,24 +5,23 @@ conda activate pmoss
 
 
 # For pre-training 
-python run_bc.py \
+python run_cql.py \
   --mpath "None" \
   --wl 11 \
   --ecfg 100 \
   --sidx 200 \
   --rtg 2 
 
-# base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/2025-10-08-19-56-29-0.064.d3"
+# base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/2025-10-08-14-14-34-0.016.d3"
 
-# # Traditional inference for seen workloads
 # wk_list=(11)
-# sidx_list=(200000)
+# sidx_list=(300000)
 
 # for i in "${!wk_list[@]}"; do
 #   wk=${wk_list[$i]}
 #   sidx=${sidx_list[$i]}
 
-#   python run_bc.py \
+#   python run_cql.py \
 #     --mpath "$base_model_wo_ibm" \
 #     --wl "$wk" \
 #     --ecfg 100 \

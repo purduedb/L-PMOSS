@@ -23,22 +23,36 @@ from d3rlpy.metrics import *
 import torch
 import numpy as np
 from yr_utils import *
-import torch.nn as nn
-from d3rlpy.models.encoders import Encoder
 from d3rlpy.models.encoders import EncoderFactory
-from d3rlpy.logging import LoggerAdapterFactory
+import torch.nn as nn
 
-class SilentAdapter(LoggerAdapterFactory):
-    def create(self, *args, **kwargs):
-        class _SilentLogger:
-            def __getattr__(self, name):
-                # any call like logger.info(...), logger.add_scalar(...), etc.
-                return lambda *a, **kw: None
-        return _SilentLogger()
+def get_parameter_number(cql_impl):
+    """Count parameters in CQL model (Q-networks and policy)"""
+    if cql_impl is None:
+        print("CQL implementation is None - model not built yet")
+        return
     
-def get_parameter_number(altrl_imp):
-    total_num = sum(p.numel() for p in altrl_imp._modules.policy.parameters() if p.requires_grad)
-    print({'Total': total_num})
+    total_params = 0
+    trainable_params = 0
+    
+    # Count Q-function parameters
+    if hasattr(cql_impl, '_modules') and hasattr(cql_impl._modules, 'q_funcs'):
+        for i, q_func in enumerate(cql_impl._modules.q_funcs):
+            q_total = sum(p.numel() for p in q_func.parameters())
+            q_trainable = sum(p.numel() for p in q_func.parameters() if p.requires_grad)
+            print(f'Q-function {i+1}: Total={q_total}, Trainable={q_trainable}')
+            total_params += q_total
+            trainable_params += q_trainable
+    
+    # Count policy parameters (if exists)
+    if hasattr(cql_impl, '_modules') and hasattr(cql_impl._modules, 'policy'):
+        policy_total = sum(p.numel() for p in cql_impl._modules.policy.parameters())
+        policy_trainable = sum(p.numel() for p in cql_impl._modules.policy.parameters() if p.requires_grad)
+        print(f'Policy: Total={policy_total}, Trainable={policy_trainable}')
+        total_params += policy_total
+        trainable_params += policy_trainable
+    
+    print(f'CQL Model - Total: {total_params}, Trainable: {trainable_params}')
 
 
 print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
@@ -71,7 +85,7 @@ parser.add_argument('--wl', type=int, default=11)
 parser.add_argument('--ecfg', type=int, default=30)
 parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
-parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/2025-10-07-23-01-12-0.553.pt")
+parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/model.d3")
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b")  # kb_b__ was for amd with the fsanitizer stuff
 parser.add_argument('--ablation_study', action='store_true', help='Enable ablation study mode')
@@ -264,7 +278,7 @@ for i in range(n_samples):
     obs_s_flat = obss_s[i].flatten()  # Shape: (grid*grid*features,)
     obs_mask_flat = obss_mask[i].flatten()  # Shape: (grid*grid,)
     meta_data_flat = meta_data[i].flatten()  # Shape: (num_meta_features,)
-    
+
     # Concatenate all observation components
     full_obs = np.concatenate([obs_flat, obs_s_flat, obs_mask_flat, meta_data_flat])
     observations.append(full_obs)
@@ -339,15 +353,18 @@ logging.basicConfig(
         level=logging.INFO,
 )
 
+# Disable d3rlpy logging
+logging.getLogger('d3rlpy').setLevel(logging.WARNING)
+logging.getLogger('d3rlpy.algos').setLevel(logging.WARNING)
+logging.getLogger('d3rlpy.metrics').setLevel(logging.WARNING)
 
-# D3RLPY Behavior Cloning Setup
+# D3RLPY Conservative Q-Learning Setup
 print("============================================================================================================")
-print("Setting up d3rlpy Behavior Cloning...")
+print("Setting up d3rlpy Conservative Q-Learning (CQL)...")
 
 # Action space size already determined above
 print(f"Action space size: {action_space_size}")
 
-# Setup d3rlpy Discrete BC algorithm
 class PMOSSStateEncoder(nn.Module):
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
         super().__init__()        
@@ -393,7 +410,7 @@ class PMOSSStateEncoder(nn.Module):
 
         return state_embeddings
 
-
+# Setup d3rlpy Discrete CQL algorithm
 class PMOSSStateEncoderFactory(EncoderFactory):
     TYPE = "pmoss_state"
 
@@ -416,18 +433,22 @@ encoder_factory = PMOSSStateEncoderFactory(
     num_features=nf,
     num_meta_features=nmf
 )
-
-bc_config = d3rlpy.algos.DiscreteBCConfig(
-    learning_rate=6e-4,
+cql_config = d3rlpy.algos.DiscreteCQLConfig(
+    learning_rate=1e-4,
     batch_size=args.batch_size,
-    encoder_factory=encoder_factory
+    encoder_factory=encoder_factory,
+    alpha=1.0,  # CQL regularization weight
+    n_critics=2,  # Number of Q-networks for conservative estimation
+    target_update_interval=8000,  # Target network update frequency   
 )
-bc = bc_config.create(
+cql = cql_config.create(
     device='cuda:0' if torch.cuda.is_available() else 'cpu'
     )
 discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
-print(type(bc.impl))
-print(bc)
+td_error_evaluator = d3rlpy.metrics.TDErrorEvaluator()
+value_scale_evaluator = d3rlpy.metrics.AverageValueEstimationEvaluator()
+print(type(cql.impl))
+print(cql)
 
 
 samples_per_epoch = len(observations)
@@ -435,69 +456,89 @@ n_steps_per_epoch = samples_per_epoch // args.batch_size
 n_epochs = args.epochs
 n_steps = n_epochs * n_steps_per_epoch
 save_interval = n_steps_per_epoch * 1
-model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/"
+min_accuracy_threshold = 0.001
+model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/"
 os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
-print(n_steps, n_steps_per_epoch, save_interval)
+
 
 # ========== TRAINING MODE ========== #
 if not(args.is_eval_only):
-    print("Starting d3rlpy Behavior Cloning training with accuracy-based saving...")
-    def save_checkpoint_callback(bc_model, step, epoch, evaluator, save_dir, min_accuracy):
-        # Compute action match accuracy on your dataset
-        accuracy = evaluator(bc_model, dataset)
+    print("Starting d3rlpy Conservative Q-Learning training...")
+    def save_checkpoint_callback(cql_model, step, epoch, evaluators, save_dir, min_accuracy=min_accuracy_threshold):
+        # Compute multiple metrics for CQL evaluation
+        accuracy = evaluators['action_match'](cql_model, dataset)
+        td_error = evaluators['td_error'](cql_model, dataset)
+        avg_value = evaluators['value_scale'](cql_model, dataset)
         timestamp = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
         
         # Build custom filename
         if accuracy >= min_accuracy:
-            filename = f"{timestamp}-{accuracy:.3f}.d3"
+            filename = f"{timestamp}-acc{accuracy:.3f}-td{td_error:.3f}.d3"
             path = os.path.join(save_dir, filename)
-            bc_model.save_model(path)
-            print(f"Saved checkpoint: {path} (accuracy: {accuracy:.1%})")
+            cql_model.save_model(path)
+            print(f"Saved CQL checkpoint: {path}")    
         else:
-            filename = f"{timestamp}-{accuracy:.3f}_lowaccuracy.d3"
+            filename = f"{timestamp}-acc{accuracy:.3f}-td{td_error:.3f}_lowaccuracy.d3"
+        
+        
+        print(f"  Action Match Accuracy: {accuracy:.4f} ({accuracy:.1%})")
+        print(f"  TD Error: {td_error:.6f}")
+        print(f"  Avg Value Estimation: {avg_value:.6f}")
     
-    logging.getLogger("d3rlpy").setLevel(logging.ERROR)  
-    logging.getLogger("d3rlpy").propagate = False
-    bc.fit(
+    cql.fit(
         dataset,
         n_steps=n_steps,
         n_steps_per_epoch=n_steps_per_epoch,
-        evaluators={'action_match': discrete_action_match_evaluator},
+        save_interval=save_interval,
+        evaluators={
+            'action_match': discrete_action_match_evaluator,
+            'td_error': td_error_evaluator,
+            'value_scale': value_scale_evaluator
+        },
         experiment_name=None,
         with_timestamp=False,
         epoch_callback=lambda model, step, epoch: save_checkpoint_callback(
-            bc_model=model,
+            cql_model=model,
             step=step,
             epoch=epoch,
-            evaluator=discrete_action_match_evaluator,
+            evaluators={
+                'action_match': discrete_action_match_evaluator,
+                'td_error': td_error_evaluator,
+                'value_scale': value_scale_evaluator
+            },
             save_dir=model_save_path,
             min_accuracy=0.2
-        ),
-        save_interval=10000000,
-        logging_steps=10000000,
-        logger_adapter=SilentAdapter(),
-        show_progress=False
+        )
     )
     
-    print("Training completed. Evaluating final model...")
+    print("CQL training completed. Evaluating final model...")
     
-    final_score = discrete_action_match_evaluator(bc, dataset)
+    final_score = discrete_action_match_evaluator(cql, dataset)
+    final_td_error = td_error_evaluator(cql, dataset)
+    final_avg_value = value_scale_evaluator(cql, dataset)
     print(f"Final action match accuracy: {final_score:.4f} ({final_score:.1%})")
+    print(f"Final TD error: {final_td_error:.6f}")
+    print(f"Final avg value estimation: {final_avg_value:.6f}")
+    
+    
+    strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+    if final_score > min_accuracy_threshold:
+        final_model_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/{strftime}-{final_score:.3f}.d3"
+        cql.save_model(final_model_path)
+        print(f"Final CQL model saved: {final_model_path} (accuracy: {final_score:.1%})")
     exit(0)
-    
-    # strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    # if final_score > min_accuracy_threshold:
-    #     final_model_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/{strftime}-{final_score:.3f}.d3"
-    #     bc.save_model(final_model_path)
-    #     print(f"Final model saved: {final_model_path} (accuracy: {final_score:.1%})")
-    
+
 
 obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
     = gen_token_for_eval_for_all(glb_exp_config)
-bc.build_with_dataset(dataset)
-bc.load_model(model_path)
-print("BC model loaded successfully!")
-print("Evaluating BC model with DT-style policy rollout...")
+cql.build_with_dataset(dataset)
+
+# Print CQL model parameters
+get_parameter_number(cql.impl)
+
+cql.load_model(model_path)
+print("CQL model loaded successfully!")
+print("Evaluating CQL model with DT-style policy rollout...")
 context_length = glb_exp_config[0].cnt_grid_cells
 test_dataset = StateActionReturnDataset(
     glb_exp_config[0],
@@ -505,20 +546,20 @@ test_dataset = StateActionReturnDataset(
     done_idxs_, rtgs_, timesteps_, meta_data_, obss_s_,
     obss_mask_, benchmarks_, stepwise_returns_, lengths_
 )
-print("Using loaded BC model for evaluation (inference mode)..." if args.is_eval_only else "Using best/final BC model for evaluation (training completed)...")
+print("Using loaded CQL model for evaluation (inference mode)..." if args.is_eval_only else "Using best/final CQL model for evaluation (training completed)...")
 print(f"Model path: {model_path if args.is_eval_only else final_model_path}")
 
 # =====================
-# DT-style BC policy evaluation (true empty-state rollout)
+# DT-style CQL policy evaluation (true empty-state rollout)
 # =====================
-def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
+def evaluate_cql_policy_rollout_dt_style(cql_model, exp_config, test_dataset):
     """
-    DT-style sequential rollout for BC model: start from empty state, sequentially predict actions, update state with env_update,
-    and compute action match accuracy. Closely mimics Decision Transformer evaluation.
+    DT-style sequential rollout for CQL model: start from empty state, sequentially predict actions, update state with env_update,
+    and compute action match accuracy. Uses CQL Q-function for action selection with masking.
     Returns accuracy and predicted action sequences.
     """
     loader = DataLoader(test_dataset, shuffle=True, pin_memory=True,
-                batch_size=32,
+                batch_size=args.batch_size,
                 num_workers=2
                 )
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -606,31 +647,32 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     rtgs = [0.0]
     current_rtg = torch.tensor(rtgs)
     for t in range(seq_len):
-        # print(state.shape, meta_state.shape)
         state_ = state[-1].view(1, -1).cpu().numpy()
         meta_state_ = meta_state[-1].view(1, -1).cpu().numpy()
         state_ = np.concatenate([state_, meta_state_], axis=1)
         
         # Prepare BC model input (flattened state as in training)
         # obs = state[-1].view(1, -1).cpu().numpy()
-        
-        # with meta 
-        # obs = state_[-1].view(1, -1).cpu().numpy()
         obs = state_
         obs_tensor = torch.tensor(obs, dtype=torch.float32, device=device)
         
-        # action = bc_model.predict(obs)[0]
+        # Use CQL Q-function for action selection
         with torch.no_grad():
-            logits = bc_model.impl._modules.imitator(obs_tensor).logits
-            mask_tensor = torch.from_numpy(np.array(obs_mask_core) == 0).float().to(logits.device)
-            logits = logits - 1.0e8 * mask_tensor
-            logits_actions = logits.argmax(dim=1)
-            
+            # For CQL, we use the Q-function to get Q-values for all actions
+            q_values = cql_model.impl._modules.q_funcs[0](obs_tensor)  # Use first Q-function
+            q_tensor = q_values.q_value
+            mask_tensor = torch.from_numpy(np.array(obs_mask_core) == 0).float().to(q_tensor.device)
+            # Apply masking: set invalid actions to very low Q-values
+            q_tensor = q_tensor - 1.0e8 * mask_tensor
+            # Select action with highest Q-value (greedy policy)
+            logits_actions = q_tensor.argmax(dim=1)
+
         if isinstance(logits_actions, int):
             pred_actions += [logits_actions]
         else:
             pred_actions += [logits_actions.item()]
-        
+        print(pred_actions)
+
         state, current_rtg, done, meta_state, obs_mask_core = env_update(
             x, m_x, st,  
             pred_actions, state, meta_state, current_rtg, exp_config,
@@ -647,7 +689,7 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     return 
 
 
-bc_actions = evaluate_bc_policy_rollout_dt_style(bc, glb_exp_config[0], test_dataset)
+cql_actions = evaluate_cql_policy_rollout_dt_style(cql, glb_exp_config[0], test_dataset)
 
 
 
