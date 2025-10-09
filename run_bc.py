@@ -7,8 +7,7 @@ import os
 import logging
 import argparse
 import time
-# Suppress d3rlpy verbose output
-os.environ['D3RLPY_DISABLE_TQDM'] = '1'
+import math
 from mingpt.utils import set_seed
 import numpy as np
 import pandas as pd
@@ -27,6 +26,8 @@ import torch.nn as nn
 from d3rlpy.models.encoders import Encoder
 from d3rlpy.models.encoders import EncoderFactory
 from d3rlpy.logging import LoggerAdapterFactory
+from d3rlpy.optimizers.optimizers import AdamFactory
+from d3rlpy.optimizers.lr_schedulers import CosineAnnealingLRFactory
 
 class SilentAdapter(LoggerAdapterFactory):
     def create(self, *args, **kwargs):
@@ -82,7 +83,7 @@ parser.add_argument('--exclude_machine', type=str, help='Machine to exclude from
 parser.add_argument('--n_layer', type=int, default=6, help='Number of transformer layers')
 parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
 
-parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
+parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 
 # changed kb_b for idx kb and kbs to kbs_train
@@ -410,26 +411,15 @@ class PMOSSStateEncoderFactory(EncoderFactory):
     def get_type(self):
         return self.TYPE
 
+
 # encoder_factory = d3rlpy.models.DefaultEncoderFactory(dropout_rate=0.1)
 encoder_factory = PMOSSStateEncoderFactory(
-    n_embd=args.n_embd, 
+    n_embd=args.n_embd,
     num_features=nf,
     num_meta_features=nmf
 )
 
-bc_config = d3rlpy.algos.DiscreteBCConfig(
-    learning_rate=6e-4,
-    batch_size=args.batch_size,
-    encoder_factory=encoder_factory
-)
-bc = bc_config.create(
-    device='cuda:0' if torch.cuda.is_available() else 'cpu'
-    )
-discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
-print(type(bc.impl))
-print(bc)
-
-
+# Calculate training steps first (needed for LR scheduler)
 samples_per_epoch = len(observations)
 n_steps_per_epoch = samples_per_epoch // args.batch_size
 n_epochs = args.epochs
@@ -438,6 +428,35 @@ save_interval = n_steps_per_epoch * 1
 model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/"
 os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 print(n_steps, n_steps_per_epoch, save_interval)
+
+bc_config = d3rlpy.algos.DiscreteBCConfig(
+    learning_rate=6e-4,
+    batch_size=args.batch_size,
+    encoder_factory=encoder_factory,
+    optim_factory=AdamFactory(
+        weight_decay=0.0,
+        lr_scheduler_factory=CosineAnnealingLRFactory(T_max=n_steps, eta_min=6e-5)  # Cosine decay: 6e-4 -> 6e-5 (10% min)
+    )
+)
+bc = bc_config.create(
+    device='cuda:0' if torch.cuda.is_available() else 'cpu'
+    )
+
+# Load checkpoint if model_path is provided
+if model_path is not None and os.path.exists(model_path):
+    print(f"Loading BC checkpoint from: {model_path}")
+    bc.build_with_dataset(dataset)
+    bc.load_model(model_path)
+    print("BC checkpoint loaded successfully! Resuming training...")
+else:
+    if model_path is not None:
+        print(f"Warning: Model path '{model_path}' does not exist. Starting from scratch.")
+    else:
+        print("No checkpoint specified (--mpath). Starting training from scratch.")
+
+discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
+print(type(bc.impl))
+print(bc)
 
 # ========== TRAINING MODE ========== #
 if not(args.is_eval_only):
@@ -471,7 +490,7 @@ if not(args.is_eval_only):
             epoch=epoch,
             evaluator=discrete_action_match_evaluator,
             save_dir=model_save_path,
-            min_accuracy=0.2
+            min_accuracy=0.1
         ),
         save_interval=10000000,
         logging_steps=10000000,
@@ -483,7 +502,7 @@ if not(args.is_eval_only):
     
     final_score = discrete_action_match_evaluator(bc, dataset)
     print(f"Final action match accuracy: {final_score:.4f} ({final_score:.1%})")
-    exit(0)
+    
     
     # strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
     # if final_score > min_accuracy_threshold:

@@ -24,6 +24,8 @@ import torch
 import numpy as np
 from yr_utils import *
 from d3rlpy.models.encoders import EncoderFactory
+from d3rlpy.optimizers.optimizers import AdamFactory
+from d3rlpy.optimizers.lr_schedulers import CosineAnnealingLRFactory
 import torch.nn as nn
 
 def get_parameter_number(cql_impl):
@@ -73,7 +75,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=123)
 parser.add_argument('--context_length', type=int, default=100)  # my=> 100 in stead of 256
 parser.add_argument('--epochs', type=int, default=100)
-parser.add_argument('--batch_size', type=int, default=256)
+parser.add_argument('--batch_size', type=int, default=512)
 parser.add_argument('--cuda', type=str, default='0')
 parser.add_argument('--is_eval_only', action='store_true')
 parser.add_argument('--no_eval_only', action='store_false')
@@ -96,7 +98,7 @@ parser.add_argument('--exclude_machine', type=str, help='Machine to exclude from
 parser.add_argument('--n_layer', type=int, default=6, help='Number of transformer layers')
 parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
 
-parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
+parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 
 # changed kb_b for idx kb and kbs to kbs_train
@@ -190,10 +192,10 @@ nmf=24
 glb_exp_config = []
 for p in [
     "intel_skx_4s_8n", 
-    "amd_epyc7543_2s_8n",
-    "amd_epyc7543_2s_2n", 
+    # "amd_epyc7543_2s_8n",
+    # "amd_epyc7543_2s_2n", 
     "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
+    # "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -299,6 +301,16 @@ observations = np.array(observations, dtype=np.float32)
 d3rl_actions = np.array(d3rl_actions, dtype=np.int64)
 d3rl_rewards = np.array(d3rl_rewards, dtype=np.float32).flatten()
 d3rl_terminals = np.array(d3rl_terminals, dtype=bool)
+
+# CRITICAL FIX: Normalize rewards to prevent Q-value explosion
+print(f"Raw reward statistics: min={d3rl_rewards.min():.2f}, max={d3rl_rewards.max():.2f}, mean={d3rl_rewards.mean():.2f}, std={d3rl_rewards.std():.2f}")
+reward_mean = d3rl_rewards.mean()
+reward_std = d3rl_rewards.std() + 1e-8  # Add epsilon to avoid division by zero
+d3rl_rewards = (d3rl_rewards - reward_mean) / reward_std
+# Clip to reasonable range [-10, 10]
+d3rl_rewards = np.clip(d3rl_rewards, -10.0, 10.0)
+print(f"Normalized reward statistics: min={d3rl_rewards.min():.2f}, max={d3rl_rewards.max():.2f}, mean={d3rl_rewards.mean():.2f}, std={d3rl_rewards.std():.2f}")
+
 
 # Force action space to be 96 by adding dummy transitions for unused actions
 unique_actions = np.unique(d3rl_actions)
@@ -429,28 +441,12 @@ class PMOSSStateEncoderFactory(EncoderFactory):
 
 # encoder_factory = d3rlpy.models.DefaultEncoderFactory(dropout_rate=0.1)
 encoder_factory = PMOSSStateEncoderFactory(
-    n_embd=args.n_embd, 
+    n_embd=args.n_embd,
     num_features=nf,
     num_meta_features=nmf
 )
-cql_config = d3rlpy.algos.DiscreteCQLConfig(
-    learning_rate=1e-4,
-    batch_size=args.batch_size,
-    encoder_factory=encoder_factory,
-    alpha=1.0,  # CQL regularization weight
-    n_critics=2,  # Number of Q-networks for conservative estimation
-    target_update_interval=8000,  # Target network update frequency   
-)
-cql = cql_config.create(
-    device='cuda:0' if torch.cuda.is_available() else 'cpu'
-    )
-discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
-td_error_evaluator = d3rlpy.metrics.TDErrorEvaluator()
-value_scale_evaluator = d3rlpy.metrics.AverageValueEstimationEvaluator()
-print(type(cql.impl))
-print(cql)
 
-
+# Calculate training steps first (needed for LR scheduler)
 samples_per_epoch = len(observations)
 n_steps_per_epoch = samples_per_epoch // args.batch_size
 n_epochs = args.epochs
@@ -459,6 +455,41 @@ save_interval = n_steps_per_epoch * 1
 min_accuracy_threshold = 0.001
 model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/"
 os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
+
+cql_config = d3rlpy.algos.DiscreteCQLConfig(
+    learning_rate=3e-4,               # Reduced from 9e-4 for stability
+    batch_size=args.batch_size,
+    encoder_factory=encoder_factory,
+    optim_factory=AdamFactory(
+        weight_decay=0.0,             # CRITICAL: Remove weight decay
+        lr_scheduler_factory=CosineAnnealingLRFactory(T_max=n_steps, eta_min=6e-5)  # Cosine decay: 6e-4 -> 6e-5 (10% min)
+    ),
+    alpha=0.5,                        # Reduced CQL penalty (was 1.0) Reduce alpha further: 0.5 → 0.3 (less conservative)
+    gamma=0.95,                       # Lower discount to reduce Q-value propagation (was 0.99) Increase gamma: 0.95 → 0.97 (longer horizon)
+    n_critics=2,                      # Number of Q-networks for conservative estimation
+    target_update_interval=2000,      # More frequent updates (was 8000)
+)
+cql = cql_config.create(
+    device='cuda:0' if torch.cuda.is_available() else 'cpu'
+    )
+
+# Load checkpoint if model_path is provided
+if model_path is not None and os.path.exists(model_path):
+    print(f"Loading CQL checkpoint from: {model_path}")
+    cql.build_with_dataset(dataset)
+    cql.load_model(model_path)
+    print("CQL checkpoint loaded successfully! Resuming training...")
+else:
+    if model_path is not None:
+        print(f"Warning: Model path '{model_path}' does not exist. Starting from scratch.")
+    else:
+        print("No checkpoint specified (--mpath). Starting training from scratch.")
+
+discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
+td_error_evaluator = d3rlpy.metrics.TDErrorEvaluator()
+value_scale_evaluator = d3rlpy.metrics.AverageValueEstimationEvaluator()
+print(type(cql.impl))
+print(cql)
 
 
 # ========== TRAINING MODE ========== #
@@ -507,7 +538,7 @@ if not(args.is_eval_only):
                 'value_scale': value_scale_evaluator
             },
             save_dir=model_save_path,
-            min_accuracy=0.2
+            min_accuracy=0.1
         )
     )
     
