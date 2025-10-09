@@ -37,9 +37,37 @@ class SilentAdapter(LoggerAdapterFactory):
                 return lambda *a, **kw: None
         return _SilentLogger()
     
-def get_parameter_number(altrl_imp):
-    total_num = sum(p.numel() for p in altrl_imp._modules.policy.parameters() if p.requires_grad)
-    print({'Total': total_num})
+def get_parameter_number(bc_model):
+    """Count all trainable parameters in BC model"""
+    if bc_model.impl is None:
+        print("BC model not built yet")
+        return
+
+    total_params = 0
+
+    # Count imitator (policy) parameters
+    if hasattr(bc_model.impl, '_modules') and hasattr(bc_model.impl._modules, 'imitator'):
+        imitator = bc_model.impl._modules.imitator
+
+        # Encoder parameters
+        if hasattr(imitator, '_encoder'):
+            encoder_params = sum(p.numel() for p in imitator._encoder.parameters() if p.requires_grad)
+            print(f"  Encoder: {encoder_params:,} parameters")
+            total_params += encoder_params
+
+        # Policy head parameters (after encoder)
+        if hasattr(imitator, '_fc'):
+            head_params = sum(p.numel() for p in imitator._fc.parameters() if p.requires_grad)
+            print(f"  Policy Head: {head_params:,} parameters")
+            total_params += head_params
+
+        # If we can't break it down, just count all imitator params
+        if total_params == 0:
+            total_params = sum(p.numel() for p in imitator.parameters() if p.requires_grad)
+            print(f"  Imitator (total): {total_params:,} parameters")
+
+    print(f"BC Model Total Trainable Parameters: {total_params:,}")
+    return total_params
 
 
 print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
@@ -350,11 +378,12 @@ print(f"Action space size: {action_space_size}")
 
 # Setup d3rlpy Discrete BC algorithm
 class PMOSSStateEncoder(nn.Module):
+    """Original lightweight encoder (~90K params)"""
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
-        super().__init__()        
+        super().__init__()
         chassis_dimx = cd[0]
         chassis_dimy = cd[1]
-        
+
         self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (3 + num_features, 64, 64)
         self.num_features = num_features
         self.num_mfeatures = num_mfeatures
@@ -371,15 +400,15 @@ class PMOSSStateEncoder(nn.Module):
         )
 
         self.meta_encoder_s = nn.Sequential(
-            nn.Linear(self.num_mfeatures+2, 32), 
-            nn.ReLU(), 
+            nn.Linear(self.num_mfeatures+2, 32),
+            nn.ReLU(),
             nn.Linear(32, self.num_mfeatures)
             )
 
     def forward(self, x):
         x1_ = x[:, :self.c*self.h*self.w]
-        x2_ = x[:, self.c*self.h*self.w:] 
-        
+        x2_ = x[:, self.c*self.h*self.w:]
+
         x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
         state_embeddings = self.state_encoder_s(x1_)
 
@@ -395,28 +424,112 @@ class PMOSSStateEncoder(nn.Module):
         return state_embeddings
 
 
+class PMOSSStateEncoderLarge(nn.Module):
+    """Scaled-up encoder for better capacity (~1-2M params, closer to DT's 3.69M)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Larger CNN with more filters and layers
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 64 channels
+            nn.Conv2d(self.c, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+
+            # Layer 2: 64 -> 128 channels
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+
+            # Layer 3: 128 -> 256 channels
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+
+            # Layer 4: 256 -> 512 channels
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, n_embd),
+        )
+
+        # Larger meta encoder with more capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
 class PMOSSStateEncoderFactory(EncoderFactory):
     TYPE = "pmoss_state"
 
-    def __init__(self, n_embd=128, num_features=nf, num_meta_features=nmf):
+    def __init__(self, n_embd=128, num_features=nf, num_meta_features=nmf, use_large=False):
         self.n_embd = n_embd
         self.num_features = num_features
         self.num_meta_features = num_meta_features
+        self.use_large = use_large
 
     def create(self, observation_shape):
         print(observation_shape)
-        return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features, 
-                                 self.num_meta_features)
+        if self.use_large:
+            print("Using PMOSSStateEncoderLarge (~1-2M params)")
+            return PMOSSStateEncoderLarge(observation_shape, self.n_embd, self.num_features,
+                                          self.num_meta_features)
+        else:
+            print("Using PMOSSStateEncoder (~90K params)")
+            return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features,
+                                     self.num_meta_features)
 
     def get_type(self):
         return self.TYPE
 
 
 # encoder_factory = d3rlpy.models.DefaultEncoderFactory(dropout_rate=0.1)
+# Set use_large=True to use the scaled-up encoder (~1-2M params), False for original (~90K params)
 encoder_factory = PMOSSStateEncoderFactory(
     n_embd=args.n_embd,
     num_features=nf,
-    num_meta_features=nmf
+    num_meta_features=nmf,
+    use_large=True  # Change to True to use large encoder
 )
 
 # Calculate training steps first (needed for LR scheduler)
@@ -457,6 +570,11 @@ else:
 discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
 print(type(bc.impl))
 print(bc)
+
+# Print parameter count
+print("\n========== BC Model Parameters ==========")
+get_parameter_number(bc)
+print("=========================================\n")
 
 # ========== TRAINING MODE ========== #
 if not(args.is_eval_only):
