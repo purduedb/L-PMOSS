@@ -162,7 +162,7 @@ class Trainer:
 					
 					if model_type == 'reward_conditioned':
 						if self.exp_config.generalization_study:
-							save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/base_models/with_ibm/{self.exp_config.exclude_machine}/{self.exp_config.index}"
+							save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/base_models/{self.exp_config.exclude_machine}/{self.exp_config.index}"
 						elif self.exp_config.ablation_study:
 							if self.exp_config.ablation_param == 'num_layer':
 								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nl_{self.exp_config.n_layer}/{self.exp_config.index}"
