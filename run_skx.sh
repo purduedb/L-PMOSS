@@ -12,7 +12,6 @@ assistant_model_amd_2s8n_v1="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_
 assistant_model_amd_2s8n_v2="/scratch/gilbreth/yrayhan/save_models/amd_epyc7543_2s_8n/0/2025-07-11-00-39-15-0.979.pkl"
 
 assistant_model_intel_sb_4s_4n_v1="/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-11-17-09-47-0.985.pkl"
-
 assistant_model_intel_ice_2s_2n_v1="/scratch/gilbreth/yrayhan/save_models/intel_ice_2s_2n/0/2025-07-12-01-37-55-0.936.pkl"
 assistant_model_ibm_power_2s_2n_v1="/scratch/gilbreth/yrayhan/save_models/ibm_power_2s_2n/0/2025-07-12-03-23-52-0.903.pkl"
 assistant_model_nvidia_gh_1s_1n_v1="/scratch/gilbreth/yrayhan/save_models/nvidia_gh_1s_1n/0/2025-07-12-09-02-06-0.919.pkl"
@@ -43,8 +42,24 @@ assistant_model_nvidia_gh_1s_1n_v1="/scratch/gilbreth/yrayhan/save_models/nvidia
 # wk_list=(34)
 # sidx_list=(208)
 # New AMD
-wk_list=(45)
-sidx_list=(423)
+# wk_list=(45)
+# sidx_list=(423)
+# for i in "${!wk_list[@]}"; do
+#   wk=${wk_list[$i]}
+#   sidx=${sidx_list[$i]}
+
+#   python run_dt_place.py \
+#     --mpath "$base_model_wo_ibm" \
+#     --wl "$wk" \
+#     --ecfg 413 \
+#     --sidx "$sidx" \
+#     --is_eval_only \
+#     --rtg 2
+# done
+
+# For inference
+wk_list=(11)
+sidx_list=(-2)
 for i in "${!wk_list[@]}"; do
   wk=${wk_list[$i]}
   sidx=${sidx_list[$i]}
@@ -52,12 +67,11 @@ for i in "${!wk_list[@]}"; do
   python run_dt_place.py \
     --mpath "$base_model_wo_ibm" \
     --wl "$wk" \
-    --ecfg 413 \
+    --ecfg 100 \
     --sidx "$sidx" \
     --is_eval_only \
     --rtg 2
 done
-
 # For pre-training 
 # python run_dt_place.py \
 #   --mpath "$base_model_wo_ibm" \

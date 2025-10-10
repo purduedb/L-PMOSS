@@ -206,10 +206,10 @@ nmf=24
 glb_exp_config = []
 for p in [
     "intel_skx_4s_8n", 
-    "amd_epyc7543_2s_8n",
-    "amd_epyc7543_2s_2n", 
-    "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
+    # "amd_epyc7543_2s_8n",
+    # "amd_epyc7543_2s_2n", 
+    # "intel_sb_4s_4n",
+    # "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -723,10 +723,7 @@ if not(args.is_eval_only):
 
 obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
     = gen_token_for_eval_for_all(glb_exp_config)
-bc.build_with_dataset(dataset)
-bc.load_model(model_path)
-print("BC model loaded successfully!")
-print("Evaluating BC model with DT-style policy rollout...")
+
 context_length = glb_exp_config[0].cnt_grid_cells
 test_dataset = StateActionReturnDataset(
     glb_exp_config[0],
@@ -820,7 +817,7 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     meta_state = meta_state.type(torch.float32).to(device).unsqueeze(0)
 
     # Set model to evaluation mode (disables dropout, batchnorm updates)
-    bc_model.eval()
+    # bc_model.eval()
 
     # state_obs_mask = torch.zeros((1, chassis_dimx, chassis_dimy), dtype=torch.bool, device=device)
     # state = torch.cat((state_obs, state_obs_s, state_obs_mask), 0).view(-1, chassis_dimx, chassis_dimy)
@@ -831,7 +828,8 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     # obs_mask_core = torch.ones(chassis_dimx * chassis_dimy, dtype=torch.int32)
     pred_actions = []
     done = False
-
+    # Log time of this prediction
+    start_time = time.time()
     # --- Rollout loop ---
     rtgs = [0.0]
     current_rtg = torch.tensor(rtgs)
@@ -865,9 +863,10 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
             break
     pred_actions = np.array(pred_actions)
     """actions here are hw positions of the workers"""
-    retrieve_config(exp_config, pred_actions, 200000000)
+    retrieve_config(exp_config, pred_actions, args.sidx)
     print("REFINE ACTION")
     print("=====================ALL DONE!=====================")
+    print("Total rollout time:", time.time() - start_time)
     return 
 
 

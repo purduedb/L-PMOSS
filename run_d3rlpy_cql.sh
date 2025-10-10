@@ -3,10 +3,10 @@
 module load conda
 conda activate pmoss
 
-base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/2025-10-09-23-43-37-0.523.d3"
+base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/2025-10-10-08-58-07-0.188.d3"
 # For pre-training 
 python run_cql.py \
-  --mpath "None" \
+  --mpath "$base_model_wo_ibm" \
   --wl 11 \
   --ecfg 100 \
   --sidx 200 \

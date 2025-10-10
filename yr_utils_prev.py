@@ -6,12 +6,9 @@ import pandas as pd
 np.set_printoptions(threshold=sys.maxsize)
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
 import copy
-import os
+import os 
 from pmoss_configs import processor_dict
 from collections import Counter
-
-# Global cache for loaded data to avoid repeated file I/O during inference
-_data_cache = {}
 
 def load_edge_index(cGridCell):
 		if machine == 0:
@@ -43,14 +40,9 @@ def load_edge_index(cGridCell):
 
 
 def load_hardware_snapshot(exp_config):
-		# Check cache first
-		cache_key = f"hw_snapshot_{exp_config.processor}_{exp_config.workload}_{exp_config.index}_{exp_config.idx_kb_folder}"
-		if cache_key in _data_cache:
-				return _data_cache[cache_key]
-
-		cfg_par = exp_config.cfg_par
+		cfg_par = exp_config.cfg_par  
 		sample_array = np.loadtxt(exp_config.kb_path + str(exp_config.machine.li_ncore_dumper[0]) + "/data_view.txt")
-
+		
 		GRID_FEATURES = np.zeros((sample_array.shape[0], exp_config.cnt_grid_cells, exp_config.num_features))
 		GRID_QUERIES = np.zeros((sample_array.shape[0], exp_config.cnt_grid_cells))
 
@@ -89,27 +81,19 @@ def load_hardware_snapshot(exp_config):
 
 		GRID_FEATURES = np.nan_to_num(GRID_FEATURES, neginf=0, nan=0, posinf=9999999999)
 		grid_features = np.divide(GRID_FEATURES, grid_queries, out=np.zeros_like(GRID_FEATURES), where=grid_queries!=0)
-
+		
 		# grid_features_idx = np.arange(0, exp_config.cnt_grid_cells)
 		# grid_features_idx = np.reshape(grid_features_idx, (1, grid_features_idx.shape[0]))
 		# grid_features_idx = np.repeat(grid_features_idx, grid_features.shape[0], axis=0)
 		# grid_features_idx = np.reshape(grid_features_idx, (-1, exp_config.cnt_grid_cells, 1))
 		# grid_features = np.concatenate([grid_features, grid_features_idx], axis=2)
-
-		# Cache the result before returning
-		result = (cfgs_info, grid_features)
-		_data_cache[cache_key] = result
-		return result
+		
+		return cfgs_info, grid_features
 
 
 def load_uncore_features_intel(exp_config):
-		# Check cache first
-		cache_key = f"uncore_intel_{exp_config.processor}_{exp_config.workload}_{exp_config.index}_{exp_config.idx_kb_folder}"
-		if cache_key in _data_cache:
-				return _data_cache[cache_key]
-
 		# Only for intel
-		cfg_par = exp_config.cfg_par
+		cfg_par = exp_config.cfg_par 
 		num_numa = exp_config.machine.numa_node
 		num_mc_per_numa = exp_config.machine.mc_channel_per_numa
 		num_socket = exp_config.machine.socket
@@ -153,10 +137,7 @@ def load_uncore_features_intel(exp_config):
 		upi_outgoing_throughput_ts = np.reshape(upi_outgoing_throughput_ts,
 																							(upi_outgoing_throughput_ts.shape[0], num_socket, -1))
 
-		# Cache the result before returning
-		result = (cfg, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts)
-		_data_cache[cache_key] = result
-		return result
+		return cfg, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts
 
 
 def load_qtput_cum(exp_config):
@@ -371,12 +352,7 @@ def get_wkload_range(dataset, id, wkload, machine):
 
 
 def load_qtput_per_kscell(exp_config):
-		# Check cache first
-		cache_key = f"qtput_kscell_{exp_config.processor}_{exp_config.workload}_{exp_config.index}_{exp_config.idx_kb_folder}"
-		if cache_key in _data_cache:
-				return _data_cache[cache_key]
-
-		cfg_par = exp_config.cfg_par
+		cfg_par = exp_config.cfg_par 
 		grp_len = exp_config.per_cfg_sample
 
 		raw_tL = []
@@ -403,11 +379,7 @@ def load_qtput_per_kscell(exp_config):
 		
 		query_throughput = query_throughput - query_throughput_shadow
 		idx_array = np.asarray(idx)
-
-		# Cache the result before returning
-		result = (idx_array, query_throughput)
-		_data_cache[cache_key] = result
-		return result
+		return idx_array, query_throughput
 
 
 def load_machine_adjacency():
@@ -430,14 +402,10 @@ def load_frozen_cell_embeddings():
 
 
 def load_actions(exp_config, cfg, wl, onlyNUMA=False):
-		# Check cache first
-		cache_key = f"actions_{exp_config.processor}_{cfg}_{wl}_{onlyNUMA}_{exp_config.index}_{exp_config.cnt_grid_cells}"
-		if cache_key in _data_cache:
-				return _data_cache[cache_key]
-
+		
 		# 1. this should come from the machine, which are the worker threads and how they should be converted to 0 - num of workers
 		# 2. at the end there is this 10 * 10 division, you can change it to a square root division.
-
+		
 		gen_core_dict = {}
 		coreIdx = 0
 
@@ -495,9 +463,7 @@ def load_actions(exp_config, cfg, wl, onlyNUMA=False):
 		refined_configs = np.asarray(refined_configs)
 		refined_configs = np.reshape(refined_config, (-1, ))
 		# refined_configs_li = refined_config.tolist()
-
-		# Cache the result before returning
-		_data_cache[cache_key] = refined_configs
+		
 		return refined_configs
 
 
@@ -593,7 +559,7 @@ def retrieve_config(exp_config, out_actions, cfg_idx):
 				cfg_file = save_cfg_dir + "/c_" + str(cfg_idx) + "_" + str(exp_config.cnt_grid_cells) + ".txt"
 		elif exp_config.index == 1:
 				cfg_file = save_cfg_dir + "/c_" + str(cfg_idx) + "_" + str(exp_config.cnt_grid_cells) + "_r.txt"
-		print("SAVING TO:", cfg_file)
+		
 		np.savetxt(cfg_file, retrieved_configs, fmt='%i')
 		return retrieved_configs
 
@@ -2041,7 +2007,7 @@ def env_update(
 				 
 		numa_machine_obs = numa_machine_obs.view(-1, chassis_dimx, chassis_dimy)
 		numa_machine_obs_s = numa_machine_obs_s.view(-1, chassis_dimx, chassis_dimy)
-
+		
 		"""If you want the position mask to be a counter rather than a binary matrix
 				and balance the load
 		"""
@@ -2049,25 +2015,22 @@ def env_update(
 		# print("TS = ", curr_ts)
 		# if curr_ts == exp_config.cnt_grid_cells/2:
 		#     bound_core = int(exp_config.cnt_grid_cells / exp_config.machine.num_worker)+1
-		#     cores_position = exp_config.machine.worker_to_chassis_pos_mapping
+		#     cores_position = exp_config.machine.worker_to_chassis_pos_mapping 
 		#     obs_mask_core = np.full((chassis_dimx * chassis_dimy, ), 0)
 		#     chassis_act_=[int(cores_position[int(z)]) for z in range(exp_config.machine.num_worker)]
 		#     obs_mask_core[np.array(chassis_act_).astype(int)] = bound_core
-
-		# Get device once at the beginning to avoid redundant calls
-		device = numa_machine_obs.device
-
+				
 		state_obs_mask = np.full((chassis_dimx * chassis_dimy,), False)
 		mask_already_full = np.where(obs_mask_core == 0)
 		state_obs_mask[mask_already_full] = True
 		state_obs_mask = np.reshape(state_obs_mask, (1, chassis_dimx, chassis_dimy))
-		# Create tensor directly on the correct device to avoid transfer
-		state_obs_mask = torch.tensor(state_obs_mask, device=device)
+		state_obs_mask = torch.tensor(state_obs_mask)
 		numa_machine_obss_mask = state_obs_mask.view(-1, chassis_dimx, chassis_dimy)
-
-		# These tensors should already be on the same device, but ensure consistency
-		if numa_machine_obs_s.device != device:
-				numa_machine_obs_s = numa_machine_obs_s.to(device)
+		numa_machine_obss_mask = numa_machine_obss_mask.view(-1, chassis_dimx, chassis_dimy)
+		
+		device = numa_machine_obs.device 
+		numa_machine_obs_s = numa_machine_obs_s.to(device)
+		numa_machine_obss_mask = numa_machine_obss_mask.to(device)
 		obs_state_new = torch.cat((numa_machine_obs, numa_machine_obs_s, numa_machine_obss_mask), dim=0).unsqueeze(0)
 		
 		# print(obs_state_new.shape)
@@ -2089,34 +2052,27 @@ def env_update(
 						metas = torch.cat((current_mx, mx), dim=0)
 				else:
 						mx = o3.unsqueeze(0)
-						# Move mx to device first before concatenation
-						if mx.device != device:
-								mx = mx.to(device)
-
 						p_feat = [-1, -1]
 						for key in processor_dict:
 								if key in exp_config.processor:
-									p_feat[0] = processor_dict[key]
+									p_feat[0] = processor_dict[key]    
 									break
 						p_feat[1] = exp_config.machine.numa_node
-						# Create tensor on the same device as mx
 						grid_features_p = torch.tensor([p_feat], dtype=mx.dtype, device=mx.device)
-
+						
 						mx = torch.cat([mx, grid_features_p], dim=1)
-
-						# Move current_mx to device if necessary
-						if current_mx.device != device:
-								current_mx = current_mx.to(device)
+						
+						device = numa_machine_obs.device 
+						mx = mx.to(device)
+						current_mx = current_mx.to(device)
 						# print(mx.shape, current_mx.shape)
 						metas = torch.cat((current_mx, mx), dim=0)
 		else:
 				mx = current_mx[-1].unsqueeze(0)
 				# print(mx.shape, current_mx.shape)
-				# Move to device only if necessary
-				if mx.device != device:
-						mx = mx.to(device)
-				if current_mx.device != device:
-						current_mx = current_mx.to(device)
+				device = numa_machine_obs.device 
+				mx = mx.to(device)
+				current_mx = current_mx.to(device)
 				metas = torch.cat((current_mx, mx), dim=0)
 
 
