@@ -28,6 +28,7 @@ from d3rlpy.models.encoders import EncoderFactory
 from d3rlpy.logging import LoggerAdapterFactory
 from d3rlpy.optimizers.optimizers import AdamFactory
 from d3rlpy.optimizers.lr_schedulers import CosineAnnealingLRFactory
+from d3rlpy.constants import LoggingStrategy
 
 class SilentAdapter(LoggerAdapterFactory):
     def create(self, *args, **kwargs):
@@ -342,11 +343,11 @@ if missing_actions:
     d3rl_terminals = np.concatenate([d3rl_terminals, dummy_terminals])
 
 print(f"Final data shapes (with action space = {action_space_size}):")
-print(f"  Observations: {observations.shape}")
-print(f"  Actions: {d3rl_actions.shape} (unique: {len(np.unique(d3rl_actions))})")
-print(f"  Rewards: {d3rl_rewards.shape}")
-print(f"  Terminals: {d3rl_terminals.shape}")
-print(f"  Action range: {d3rl_actions.min()}-{d3rl_actions.max()}")
+print(f"Observations: {observations.shape}")
+print(f"Actions: {d3rl_actions.shape} (unique: {len(np.unique(d3rl_actions))})")
+print(f"Rewards: {d3rl_rewards.shape}")
+print(f"Terminals: {d3rl_terminals.shape}")
+print(f"Action range: {d3rl_actions.min()}-{d3rl_actions.max()}")
 
 # Create d3rlpy dataset
 dataset = d3rlpy.dataset.MDPDataset(
@@ -361,12 +362,21 @@ print(f"Dataset episodes: {len(dataset.episodes)}")
 print(f"Total transitions across all episodes: {sum(len(episode) for episode in dataset.episodes)}")
 print("============================================================================================================")
 
-# set up logging
+# Completely disable all logging except CRITICAL errors
 logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        level=logging.CRITICAL,  # Changed from INFO to CRITICAL
 )
+
+# Disable d3rlpy logging completely
+logging.getLogger('d3rlpy').disabled = True
+logging.getLogger('d3rlpy.algos').disabled = True
+logging.getLogger('d3rlpy.metrics').disabled = True
+logging.getLogger('d3rlpy.dataset').disabled = True
+logging.getLogger('d3rlpy.models').disabled = True
+logging.getLogger('d3rlpy.preprocessing').disabled = True
+logging.getLogger('d3rlpy.gpu').disabled = True
 
 
 # D3RLPY Behavior Cloning Setup
@@ -481,6 +491,67 @@ class PMOSSStateEncoderLarge(nn.Module):
             nn.Linear(128, self.num_mfeatures)
         )
 
+
+class PMOSSStateEncoderXL(nn.Module):
+    """Extra-large encoder to match DT's ~3.69M parameters"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - fewer channels but more depth
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 96 channels
+            nn.Conv2d(self.c, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 2: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 3: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Layer 4: 384 -> 512 channels
+            nn.Conv2d(384, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+
+            # Global average pooling
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - reduced size to hit ~3.69M total
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, n_embd),
+        )
+
+        # Moderate meta encoder
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+
     def forward(self, x):
         x1_ = x[:, :self.c*self.h*self.w]
         x2_ = x[:, self.c*self.h*self.w:]
@@ -502,15 +573,20 @@ class PMOSSStateEncoderLarge(nn.Module):
 class PMOSSStateEncoderFactory(EncoderFactory):
     TYPE = "pmoss_state"
 
-    def __init__(self, n_embd=128, num_features=nf, num_meta_features=nmf, use_large=False):
+    def __init__(self, n_embd=128, num_features=nf, num_meta_features=nmf, use_large=False, use_xl=False):
         self.n_embd = n_embd
         self.num_features = num_features
         self.num_meta_features = num_meta_features
         self.use_large = use_large
+        self.use_xl = use_xl
 
     def create(self, observation_shape):
         print(observation_shape)
-        if self.use_large:
+        if self.use_xl:
+            print("Using PMOSSStateEncoderXL (~3.69M params to match DT)")
+            return PMOSSStateEncoderXL(observation_shape, self.n_embd, self.num_features,
+                                       self.num_meta_features)
+        elif self.use_large:
             print("Using PMOSSStateEncoderLarge (~1-2M params)")
             return PMOSSStateEncoderLarge(observation_shape, self.n_embd, self.num_features,
                                           self.num_meta_features)
@@ -524,12 +600,16 @@ class PMOSSStateEncoderFactory(EncoderFactory):
 
 
 # encoder_factory = d3rlpy.models.DefaultEncoderFactory(dropout_rate=0.1)
-# Set use_large=True to use the scaled-up encoder (~1-2M params), False for original (~90K params)
+# Encoder options:
+#   use_xl=True: ~3.69M params (matches DT) - best for breaking through plateaus
+#   use_large=True: ~1-2M params - good balance
+#   both False: ~90K params - lightweight baseline
 encoder_factory = PMOSSStateEncoderFactory(
     n_embd=args.n_embd,
     num_features=nf,
     num_meta_features=nmf,
-    use_large=True  # Change to True to use large encoder
+    use_large=False,
+    use_xl=True  # Use XL encoder to match DT's 3.69M params
 )
 
 # Calculate training steps first (needed for LR scheduler)
@@ -542,15 +622,20 @@ model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/"
 os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 print(n_steps, n_steps_per_epoch, save_interval)
 
+# Determine learning rate based on whether we're loading a checkpoint
+initial_lr = 1e-4 if model_path is not None and os.path.exists(model_path) else 6e-4
+
 bc_config = d3rlpy.algos.DiscreteBCConfig(
-    learning_rate=6e-4,
+    learning_rate=initial_lr,
     batch_size=args.batch_size,
     encoder_factory=encoder_factory,
     optim_factory=AdamFactory(
         weight_decay=0.0,
-        lr_scheduler_factory=CosineAnnealingLRFactory(T_max=n_steps, eta_min=6e-5)  # Cosine decay: 6e-4 -> 6e-5 (10% min)
-    )
+        lr_scheduler_factory=CosineAnnealingLRFactory(T_max=n_steps, eta_min=6e-5)  # Cosine decay
+    ),
+    beta=0.5  # Label smoothing: helps prevent overconfidence (default is 1.0)
 )
+print(f"Using initial learning rate: {initial_lr} ({'fine-tuning' if model_path else 'from scratch'})")
 bc = bc_config.create(
     device='cuda:0' if torch.cuda.is_available() else 'cpu'
     )
@@ -562,16 +647,13 @@ if model_path is not None and os.path.exists(model_path):
     bc.load_model(model_path)
     print("BC checkpoint loaded successfully! Resuming training...")
 else:
-    if model_path is not None:
-        print(f"Warning: Model path '{model_path}' does not exist. Starting from scratch.")
-    else:
-        print("No checkpoint specified (--mpath). Starting training from scratch.")
+    bc.build_with_dataset(dataset)
 
 discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
 print(type(bc.impl))
 print(bc)
 
-# Print parameter count
+# Print parameter count (model already built above)
 print("\n========== BC Model Parameters ==========")
 get_parameter_number(bc)
 print("=========================================\n")
@@ -580,16 +662,25 @@ print("=========================================\n")
 if not(args.is_eval_only):
     print("Starting d3rlpy Behavior Cloning training with accuracy-based saving...")
     def save_checkpoint_callback(bc_model, step, epoch, evaluator, save_dir, min_accuracy):
-        # Compute action match accuracy on your dataset
+        # Get current learning rate from optimizer
+        current_lr = None
+        if hasattr(bc_model.impl, '_optim') and bc_model.impl._optim is not None:
+            current_lr = bc_model.impl._optim.param_groups[0]['lr']
         accuracy = evaluator(bc_model, dataset)
         timestamp = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-        
+
+        # Print with learning rate
+        if current_lr is not None:
+            print(f"Epoch {epoch} | LR: {current_lr:.6f} | Accuracy: {accuracy:.4f} ({accuracy:.1%})")
+        else:
+            print(f"Epoch {epoch} | Accuracy: {accuracy:.4f} ({accuracy:.1%})")
+
         # Build custom filename
         if accuracy >= min_accuracy:
             filename = f"{timestamp}-{accuracy:.3f}.d3"
             path = os.path.join(save_dir, filename)
             bc_model.save_model(path)
-            print(f"Saved checkpoint: {path} (accuracy: {accuracy:.1%})")
+            print(f"Saved checkpoint: {path}")
         else:
             filename = f"{timestamp}-{accuracy:.3f}_lowaccuracy.d3"
     
@@ -611,9 +702,10 @@ if not(args.is_eval_only):
             min_accuracy=0.1
         ),
         save_interval=10000000,
-        logging_steps=10000000,
+        logging_steps=1e15,
+        logging_strategy=LoggingStrategy.EPOCH,
         logger_adapter=SilentAdapter(),
-        show_progress=False
+        show_progress=True
     )
     
     print("Training completed. Evaluating final model...")
@@ -643,7 +735,7 @@ test_dataset = StateActionReturnDataset(
     obss_mask_, benchmarks_, stepwise_returns_, lengths_
 )
 print("Using loaded BC model for evaluation (inference mode)..." if args.is_eval_only else "Using best/final BC model for evaluation (training completed)...")
-print(f"Model path: {model_path if args.is_eval_only else final_model_path}")
+print(f"Model path: {model_path if args.is_eval_only else 'N/A'}")
 
 # =====================
 # DT-style BC policy evaluation (true empty-state rollout)
@@ -655,7 +747,7 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     Returns accuracy and predicted action sequences.
     """
     loader = DataLoader(test_dataset, shuffle=True, pin_memory=True,
-                batch_size=32,
+                batch_size=args.batch_size,
                 num_workers=2
                 )
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -726,8 +818,9 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     
     state = state.type(torch.float32).to(device).unsqueeze(0)
     meta_state = meta_state.type(torch.float32).to(device).unsqueeze(0)
-		
 
+    # Set model to evaluation mode (disables dropout, batchnorm updates)
+    bc_model.eval()
 
     # state_obs_mask = torch.zeros((1, chassis_dimx, chassis_dimy), dtype=torch.bool, device=device)
     # state = torch.cat((state_obs, state_obs_s, state_obs_mask), 0).view(-1, chassis_dimx, chassis_dimy)
@@ -738,23 +831,17 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     # obs_mask_core = torch.ones(chassis_dimx * chassis_dimy, dtype=torch.int32)
     pred_actions = []
     done = False
-    
+
     # --- Rollout loop ---
     rtgs = [0.0]
     current_rtg = torch.tensor(rtgs)
     for t in range(seq_len):
-        # print(state.shape, meta_state.shape)
-        state_ = state[-1].view(1, -1).cpu().numpy()
-        meta_state_ = meta_state[-1].view(1, -1).cpu().numpy()
-        state_ = np.concatenate([state_, meta_state_], axis=1)
-        
-        # Prepare BC model input (flattened state as in training)
-        # obs = state[-1].view(1, -1).cpu().numpy()
-        
-        # with meta 
-        # obs = state_[-1].view(1, -1).cpu().numpy()
-        obs = state_
-        obs_tensor = torch.tensor(obs, dtype=torch.float32, device=device)
+        # Keep tensors on GPU - no CPU/GPU transfer in loop (much faster!)
+        state_ = state[-1].view(1, -1)
+        meta_state_ = meta_state[-1].view(1, -1)
+
+        # Concatenate on GPU
+        obs_tensor = torch.cat([state_, meta_state_], dim=1)
         
         # action = bc_model.predict(obs)[0]
         with torch.no_grad():

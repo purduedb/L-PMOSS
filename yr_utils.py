@@ -1968,10 +1968,10 @@ def env_update(
 		# print(numa_machine_obss_mask.view(chassis_dimx, chassis_dimy))
 		# zz = input()
 
-		cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
-		original_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale  # at this point the split_point has no effect
-		max_tput_dset = original_max_tput_dset
-		cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
+		# cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
+		# original_max_tput_dset = find_correct_max_tput_for_wl(exp_config) * exp_config.rtg_scale  # at this point the split_point has no effect
+		# max_tput_dset = original_max_tput_dset
+		# cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
 		
 		a = int(actions[-1])
 		"""By placing the [ith] grid cell, at the [a]th place in the machine

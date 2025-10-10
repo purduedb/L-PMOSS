@@ -27,34 +27,52 @@ from d3rlpy.models.encoders import EncoderFactory
 from d3rlpy.optimizers.optimizers import AdamFactory
 from d3rlpy.optimizers.lr_schedulers import CosineAnnealingLRFactory
 import torch.nn as nn
+from d3rlpy.logging import NoopAdapterFactory
+from d3rlpy.constants import LoggingStrategy
 
-def get_parameter_number(cql_impl):
-    """Count parameters in CQL model (Q-networks and policy)"""
-    if cql_impl is None:
-        print("CQL implementation is None - model not built yet")
+def get_parameter_number(cql_model):
+    """Count all trainable parameters in CQL model (Q-networks)"""
+    if cql_model.impl is None:
+        print("CQL model not built yet")
         return
-    
+
     total_params = 0
-    trainable_params = 0
-    
-    # Count Q-function parameters
-    if hasattr(cql_impl, '_modules') and hasattr(cql_impl._modules, 'q_funcs'):
-        for i, q_func in enumerate(cql_impl._modules.q_funcs):
-            q_total = sum(p.numel() for p in q_func.parameters())
-            q_trainable = sum(p.numel() for p in q_func.parameters() if p.requires_grad)
-            print(f'Q-function {i+1}: Total={q_total}, Trainable={q_trainable}')
+
+    # Count Q-function parameters (CQL has n_critics Q-networks)
+    if hasattr(cql_model.impl, '_modules') and hasattr(cql_model.impl._modules, 'q_funcs'):
+        q_funcs = cql_model.impl._modules.q_funcs
+
+        for i, q_func in enumerate(q_funcs):
+            # Try to break down encoder vs head
+            encoder_params = 0
+            head_params = 0
+
+            if hasattr(q_func, '_encoder'):
+                encoder_params = sum(p.numel() for p in q_func._encoder.parameters() if p.requires_grad)
+
+            if hasattr(q_func, '_fc'):
+                head_params = sum(p.numel() for p in q_func._fc.parameters() if p.requires_grad)
+
+            q_total = sum(p.numel() for p in q_func.parameters() if p.requires_grad)
+
+            if encoder_params > 0 or head_params > 0:
+                print(f"  Q-function {i+1}:")
+                print(f"    Encoder: {encoder_params:,} parameters")
+                print(f"    Head: {head_params:,} parameters")
+                print(f"    Total: {q_total:,} parameters")
+            else:
+                print(f"  Q-function {i+1}: {q_total:,} parameters")
+
             total_params += q_total
-            trainable_params += q_trainable
-    
-    # Count policy parameters (if exists)
-    if hasattr(cql_impl, '_modules') and hasattr(cql_impl._modules, 'policy'):
-        policy_total = sum(p.numel() for p in cql_impl._modules.policy.parameters())
-        policy_trainable = sum(p.numel() for p in cql_impl._modules.policy.parameters() if p.requires_grad)
-        print(f'Policy: Total={policy_total}, Trainable={policy_trainable}')
-        total_params += policy_total
-        trainable_params += policy_trainable
-    
-    print(f'CQL Model - Total: {total_params}, Trainable: {trainable_params}')
+
+    # Count target Q-networks (not trainable, but exist)
+    if hasattr(cql_model.impl, '_modules') and hasattr(cql_model.impl._modules, 'targ_q_funcs'):
+        targ_q_funcs = cql_model.impl._modules.targ_q_funcs
+        target_params = sum(sum(p.numel() for p in targ_q.parameters()) for targ_q in targ_q_funcs)
+        print(f"  Target Q-networks: {target_params:,} parameters (not trainable, updated via polyak)")
+
+    print(f"CQL Model Total Trainable Parameters: {total_params:,}")
+    return total_params
 
 
 print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
@@ -192,10 +210,10 @@ nmf=24
 glb_exp_config = []
 for p in [
     "intel_skx_4s_8n", 
-    # "amd_epyc7543_2s_8n",
-    # "amd_epyc7543_2s_2n", 
+    "amd_epyc7543_2s_8n",
+    "amd_epyc7543_2s_2n", 
     "intel_sb_4s_4n",
-    # "nvidia_gh_1s_1n",
+    "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -358,17 +376,22 @@ print(f"Dataset episodes: {len(dataset.episodes)}")
 print(f"Total transitions across all episodes: {sum(len(episode) for episode in dataset.episodes)}")
 print("============================================================================================================")
 
-# set up logging
+# Completely disable all logging except CRITICAL errors
 logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        level=logging.CRITICAL,  # Changed from INFO to CRITICAL
 )
 
-# Disable d3rlpy logging
-logging.getLogger('d3rlpy').setLevel(logging.WARNING)
-logging.getLogger('d3rlpy.algos').setLevel(logging.WARNING)
-logging.getLogger('d3rlpy.metrics').setLevel(logging.WARNING)
+# Disable d3rlpy logging completely
+logging.getLogger('d3rlpy').disabled = True
+logging.getLogger('d3rlpy.algos').disabled = True
+logging.getLogger('d3rlpy.metrics').disabled = True
+logging.getLogger('d3rlpy.dataset').disabled = True
+logging.getLogger('d3rlpy.models').disabled = True
+logging.getLogger('d3rlpy.preprocessing').disabled = True
+logging.getLogger('d3rlpy.gpu').disabled = True
+os.environ['D3RLPY_DISABLE_TQDM'] = '1'  # Disable progress bars
 
 # D3RLPY Conservative Q-Learning Setup
 print("============================================================================================================")
@@ -378,11 +401,12 @@ print("Setting up d3rlpy Conservative Q-Learning (CQL)...")
 print(f"Action space size: {action_space_size}")
 
 class PMOSSStateEncoder(nn.Module):
+    """Original lightweight encoder (~90K params per Q-network)"""
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
-        super().__init__()        
+        super().__init__()
         chassis_dimx = cd[0]
         chassis_dimy = cd[1]
-        
+
         self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (3 + num_features, 64, 64)
         self.num_features = num_features
         self.num_mfeatures = num_mfeatures
@@ -399,15 +423,15 @@ class PMOSSStateEncoder(nn.Module):
         )
 
         self.meta_encoder_s = nn.Sequential(
-            nn.Linear(self.num_mfeatures+2, 32), 
-            nn.ReLU(), 
+            nn.Linear(self.num_mfeatures+2, 32),
+            nn.ReLU(),
             nn.Linear(32, self.num_mfeatures)
             )
 
     def forward(self, x):
         x1_ = x[:, :self.c*self.h*self.w]
-        x2_ = x[:, self.c*self.h*self.w:] 
-        
+        x2_ = x[:, self.c*self.h*self.w:]
+
         x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
         state_embeddings = self.state_encoder_s(x1_)
 
@@ -422,28 +446,183 @@ class PMOSSStateEncoder(nn.Module):
 
         return state_embeddings
 
+
+class PMOSSStateEncoderLarge(nn.Module):
+    """Scaled-up encoder for CQL (~1-2M params per Q-network, 2-4M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Larger CNN with more filters and layers
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 64 channels
+            nn.Conv2d(self.c, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+
+            # Layer 2: 64 -> 128 channels
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+
+            # Layer 3: 128 -> 256 channels
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+
+            # Layer 4: 256 -> 512 channels
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, n_embd),
+        )
+
+        # Larger meta encoder with more capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+
+
+class PMOSSStateEncoderXL(nn.Module):
+    """Extra-large encoder to match DT's ~3.69M parameters (per Q-network for CQL)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - fewer channels but more depth
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 96 channels
+            nn.Conv2d(self.c, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 2: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 3: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Layer 4: 384 -> 512 channels
+            nn.Conv2d(384, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+
+            # Global average pooling
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - reduced size to hit ~3.69M per Q-network
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, n_embd),
+        )
+
+        # Moderate meta encoder
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
 # Setup d3rlpy Discrete CQL algorithm
 class PMOSSStateEncoderFactory(EncoderFactory):
     TYPE = "pmoss_state"
 
-    def __init__(self, n_embd=128, num_features=nf, num_meta_features=nmf):
+    def __init__(self, n_embd=128, num_features=nf, num_meta_features=nmf, use_large=False, use_xl=False):
         self.n_embd = n_embd
         self.num_features = num_features
         self.num_meta_features = num_meta_features
+        self.use_large = use_large
+        self.use_xl = use_xl
 
     def create(self, observation_shape):
         print(observation_shape)
-        return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features, 
-                                 self.num_meta_features)
+        if self.use_xl:
+            print("Using PMOSSStateEncoderXL (~3.69M params per Q-network, ~7.4M total for CQL with 2 Q-networks)")
+            return PMOSSStateEncoderXL(observation_shape, self.n_embd, self.num_features,
+                                       self.num_meta_features)
+        elif self.use_large:
+            print("Using PMOSSStateEncoderLarge (~1-2M params per Q-network, 2-4M total for CQL)")
+            return PMOSSStateEncoderLarge(observation_shape, self.n_embd, self.num_features,
+                                          self.num_meta_features)
+        else:
+            print("Using PMOSSStateEncoder (~90K params per Q-network, ~180K total for CQL)")
+            return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features,
+                                     self.num_meta_features)
 
     def get_type(self):
         return self.TYPE
 
 # encoder_factory = d3rlpy.models.DefaultEncoderFactory(dropout_rate=0.1)
+# Encoder options (CQL uses 2 Q-networks, so total = 2x per-network):
+#   use_xl=True: ~3.69M params per Q-network, ~7.4M total (matches 2x DT)
+#   use_large=True: ~1-2M params per Q-network, ~2-4M total
+#   both False: ~90K params per Q-network, ~180K total
 encoder_factory = PMOSSStateEncoderFactory(
     n_embd=args.n_embd,
     num_features=nf,
-    num_meta_features=nmf
+    num_meta_features=nmf,
+    use_large=False,
+    use_xl=True  # Use XL encoder to match DT's capacity
 )
 
 # Calculate training steps first (needed for LR scheduler)
@@ -457,7 +636,7 @@ model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/"
 os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
 cql_config = d3rlpy.algos.DiscreteCQLConfig(
-    learning_rate=3e-4,               # Reduced from 9e-4 for stability
+    learning_rate=5e-4,               # Reduced from 9e-4 for stability
     batch_size=args.batch_size,
     encoder_factory=encoder_factory,
     optim_factory=AdamFactory(
@@ -467,7 +646,7 @@ cql_config = d3rlpy.algos.DiscreteCQLConfig(
     alpha=0.5,                        # Reduced CQL penalty (was 1.0) Reduce alpha further: 0.5 → 0.3 (less conservative)
     gamma=0.95,                       # Lower discount to reduce Q-value propagation (was 0.99) Increase gamma: 0.95 → 0.97 (longer horizon)
     n_critics=2,                      # Number of Q-networks for conservative estimation
-    target_update_interval=2000,      # More frequent updates (was 8000)
+    target_update_interval=10000,      # More frequent updates (was 8000)
 )
 cql = cql_config.create(
     device='cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -491,55 +670,67 @@ value_scale_evaluator = d3rlpy.metrics.AverageValueEstimationEvaluator()
 print(type(cql.impl))
 print(cql)
 
+# Print parameter count
+print("\n========== CQL Model Parameters ==========")
+# cql.build_with_dataset(dataset)
+get_parameter_number(cql)
+print("==========================================\n")
+
 
 # ========== TRAINING MODE ========== #
 if not(args.is_eval_only):
     print("Starting d3rlpy Conservative Q-Learning training...")
+
+    # Track best accuracy across training
+    best_accuracy = 0.0
     def save_checkpoint_callback(cql_model, step, epoch, evaluators, save_dir, min_accuracy=min_accuracy_threshold):
+        global best_accuracy
+        current_lr = None
+        if hasattr(cql_model.impl, '_optim') and cql_model.impl._optim is not None:
+            current_lr = cql_model.impl._optim.param_groups[0]['lr']
+
         # Compute multiple metrics for CQL evaluation
         accuracy = evaluators['action_match'](cql_model, dataset)
-        td_error = evaluators['td_error'](cql_model, dataset)
-        avg_value = evaluators['value_scale'](cql_model, dataset)
         timestamp = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-        
-        # Build custom filename
-        if accuracy >= min_accuracy:
-            filename = f"{timestamp}-acc{accuracy:.3f}-td{td_error:.3f}.d3"
+
+        # Print with learning rate
+        if current_lr is not None:
+            print(f"Epoch {epoch} | LR: {current_lr:.6f} | Accuracy: {accuracy:.4f} ({accuracy:.1%})")
+        else:
+            print(f"Epoch {epoch} | Accuracy: {accuracy:.4f} ({accuracy:.1%})")
+
+        # Save only if accuracy improved
+        if accuracy > best_accuracy:
+            filename = f"{timestamp}-{accuracy:.3f}.d3"
             path = os.path.join(save_dir, filename)
             cql_model.save_model(path)
-            print(f"Saved CQL checkpoint: {path}")    
-        else:
-            filename = f"{timestamp}-acc{accuracy:.3f}-td{td_error:.3f}_lowaccuracy.d3"
-        
-        
-        print(f"  Action Match Accuracy: {accuracy:.4f} ({accuracy:.1%})")
-        print(f"  TD Error: {td_error:.6f}")
-        print(f"  Avg Value Estimation: {avg_value:.6f}")
+            print(f"Saved checkpoint: {path}")
+            best_accuracy = accuracy
     
     cql.fit(
         dataset,
         n_steps=n_steps,
         n_steps_per_epoch=n_steps_per_epoch,
-        save_interval=save_interval,
-        evaluators={
-            'action_match': discrete_action_match_evaluator,
-            'td_error': td_error_evaluator,
-            'value_scale': value_scale_evaluator
-        },
+        save_interval=1e15,  # Disable auto-saving (only save via callback)
+        logging_steps=1e15,
+        logging_strategy=LoggingStrategy.EPOCH,
         experiment_name=None,
         with_timestamp=False,
+        evaluators={
+            'action_match': discrete_action_match_evaluator,
+        },
         epoch_callback=lambda model, step, epoch: save_checkpoint_callback(
             cql_model=model,
             step=step,
             epoch=epoch,
             evaluators={
                 'action_match': discrete_action_match_evaluator,
-                'td_error': td_error_evaluator,
-                'value_scale': value_scale_evaluator
             },
             save_dir=model_save_path,
             min_accuracy=0.1
-        )
+        ),
+        show_progress=True,  # Disable tqdm progress bars
+        logger_adapter=NoopAdapterFactory(),
     )
     
     print("CQL training completed. Evaluating final model...")
@@ -661,8 +852,9 @@ def evaluate_cql_policy_rollout_dt_style(cql_model, exp_config, test_dataset):
     
     state = state.type(torch.float32).to(device).unsqueeze(0)
     meta_state = meta_state.type(torch.float32).to(device).unsqueeze(0)
-		
 
+    # Set model to evaluation mode (disables dropout, batchnorm updates)
+    cql_model.eval()
 
     # state_obs_mask = torch.zeros((1, chassis_dimx, chassis_dimy), dtype=torch.bool, device=device)
     # state = torch.cat((state_obs, state_obs_s, state_obs_mask), 0).view(-1, chassis_dimx, chassis_dimy)
@@ -673,19 +865,17 @@ def evaluate_cql_policy_rollout_dt_style(cql_model, exp_config, test_dataset):
     # obs_mask_core = torch.ones(chassis_dimx * chassis_dimy, dtype=torch.int32)
     pred_actions = []
     done = False
-    
+
     # --- Rollout loop ---
     rtgs = [0.0]
     current_rtg = torch.tensor(rtgs)
     for t in range(seq_len):
-        state_ = state[-1].view(1, -1).cpu().numpy()
-        meta_state_ = meta_state[-1].view(1, -1).cpu().numpy()
-        state_ = np.concatenate([state_, meta_state_], axis=1)
-        
-        # Prepare BC model input (flattened state as in training)
-        # obs = state[-1].view(1, -1).cpu().numpy()
-        obs = state_
-        obs_tensor = torch.tensor(obs, dtype=torch.float32, device=device)
+        # Keep tensors on GPU - no CPU/GPU transfer in loop (much faster!)
+        state_ = state[-1].view(1, -1)
+        meta_state_ = meta_state[-1].view(1, -1)
+
+        # Concatenate on GPU
+        obs_tensor = torch.cat([state_, meta_state_], dim=1)
         
         # Use CQL Q-function for action selection
         with torch.no_grad():

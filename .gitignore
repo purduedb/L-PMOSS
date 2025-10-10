@@ -1,8 +1,8 @@
 save_models/*
 kb/*
 kbs/*
-__pycache__/*
-mingpt/__pycache__/*
+__pycache__/
+mingpt/__pycache__/
 *.pyc
 base_models/*
 d3rlpy_logs/

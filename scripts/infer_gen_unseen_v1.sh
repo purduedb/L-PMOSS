@@ -17,7 +17,7 @@ for i in "${!workloads[@]}"; do
   wl=${workloads[$i]}
   sidx=${sidx_list[$i]}
   
-  python run_dt_place.py \
+  python ../run_dt_place.py \
     --mpath "$base_model_wo_amd_epyc7543_2s_8n" \
     --wl "$wl" \
     --ecfg 100 \

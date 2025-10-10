@@ -3,6 +3,7 @@
 module load conda
 conda activate pmoss
 
+base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/2025-10-09-21-58-23-0.568.d3"
 
 # For pre-training 
 python run_bc.py \
@@ -10,7 +11,8 @@ python run_bc.py \
   --wl 11 \
   --ecfg 100 \
   --sidx 200 \
-  --rtg 2 
+  --rtg 2 \
+  --epochs 400
 
 # base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/2025-10-08-19-56-29-0.064.d3"
 
