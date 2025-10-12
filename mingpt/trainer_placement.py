@@ -86,7 +86,7 @@ class Trainer:
 
 			losses = []
 			accs = np.zeros(0)
-			pbar = tqdm(enumerate(loader), total=len(loader)) if is_train else enumerate(loader)
+			pbar = tqdm(enumerate(loader), total=len(loader), disable=False) if is_train else enumerate(loader)
 			
 			if not is_train:
 				model.eval()
@@ -144,7 +144,9 @@ class Trainer:
 					# report progress
 					accs = np.append(accs, acc.cpu().numpy().mean())
 					pbar.set_description(f"epoch {epoch+1} iter {it}: train loss {loss.item():.5f}. lr {lr:e}.")
-					
+					strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+				
+				
 				# save model
 				if accs.mean() > self.best_acc + 0.02 and accs.mean()>=0.2:
 					self.best_acc = accs.mean()
@@ -171,19 +173,22 @@ class Trainer:
 							elif self.exp_config.ablation_param == 'num_embedding':
 								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/ne_{self.exp_config.n_embd}/{self.exp_config.index}"
 						else:
-							save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
+							# save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
+							save_models_dir = "/scratch/gilbreth/yrayhan/save_models/log_base_models/" + str(self.exp_config.index)
 					else:
 						save_models_dir = "/scratch/gilbreth/yrayhan/save_models/bc_models/" + str(self.exp_config.index)
 
 					os.makedirs(save_models_dir, exist_ok=True)
 					torch.save(raw_model.state_dict(), save_models_dir+"/{}-{:.3f}.pkl".format(strftime, accs.mean()))
 					model.train()
-				
+					
 			if not is_train:
 				test_loss = float(np.mean(losses))
 				logger.info("epoch, test loss: %d %f", epoch_num, test_loss)
 				# print(test_loss)
 				return test_loss
+		
+			print(f"Epoch: {epoch+1}, Time: {strftime}, Accuracy: {accs.mean():.4f}")
 
 		best_return = -float('inf')
 
@@ -218,7 +223,7 @@ class Trainer:
 
 		for epoch in range(config.max_epochs):
 			run_epoch('train', epoch_num=epoch)
-			
+		
 			if (epoch + 1) % 400 == 0:
 				if self.config.model_type == 'naive':
 					assert False

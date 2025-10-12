@@ -158,14 +158,24 @@ class GPT(nn.Module):
         
         
         if not(exp_config.num_meta_features) == 0:
-            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), 
+                                                 nn.BatchNorm2d(16),
+                                                 nn.ReLU(), # 
+                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.BatchNorm2d(32),
+                                    nn.ReLU(), 
+                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.BatchNorm2d(16),
+                                    nn.ReLU(), # 14*14*16
+                                    nn.AdaptiveAvgPool2d((1, 1)),
                                     nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
         else:
-            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
+            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), 
+                                                 nn.BatchNorm2d(16),
+                                                 nn.ReLU(), # 
+                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.BatchNorm2d(32),
+                                    nn.ReLU(), 
+                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.BatchNorm2d(16),
+                                    nn.ReLU(), # 14*14*16
+                                    nn.AdaptiveAvgPool2d((1, 1)),
                                     nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
         
         self.meta_encoder_s = nn.Sequential(nn.Linear(self.num_mfeatures+2, 32), nn.ReLU(), nn.Linear(32, self.num_mfeatures))
@@ -232,6 +242,9 @@ class GPT(nn.Module):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
     def configure_optimizers(self, train_config):
         """
@@ -246,7 +259,7 @@ class GPT(nn.Module):
         no_decay = set()
         # whitelist_weight_modules = (torch.nn.Linear, )
         whitelist_weight_modules = (torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d, torch.nn.Conv1d)
-        blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
+        blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding, torch.nn.BatchNorm2d, torch.nn.BatchNorm1d)
         for mn, m in self.named_modules():
             for pn, p in m.named_parameters():
                 fpn = '%s.%s' % (mn, pn) if mn else pn # full param name

@@ -411,16 +411,15 @@ class PMOSSStateEncoder(nn.Module):
             nn.BatchNorm2d(16),
             nn.ReLU(),
             
-            # nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
     
             nn.Linear(16, 512),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(512, 2048),
+            nn.Linear(512, 1024),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(2048, n_embd)
+            nn.Linear(1024, n_embd)
         )
 
         self.meta_encoder_s = nn.Sequential(
@@ -779,7 +778,7 @@ print(bc)
 print("\n========== BC Model Parameters ==========")
 get_parameter_number(bc)
 print("=========================================\n")
-
+# exit(0)
 
 # ========== TRAINING MODE ========== #
 if not(args.is_eval_only):
