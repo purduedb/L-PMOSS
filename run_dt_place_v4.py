@@ -189,11 +189,11 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    "intel_skx_4s_8n", 
-    "amd_epyc7543_2s_8n",
-    "amd_epyc7543_2s_2n", 
+    # "intel_skx_4s_8n", 
+    # "amd_epyc7543_2s_8n",
+    # "amd_epyc7543_2s_2n", 
     "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
+    # "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -350,15 +350,6 @@ if model_path is not None:
             state_dict[k] = v
     model.load_state_dict(state_dict, strict = True)
 model.eval()
-
-# Compile model for faster inference (PyTorch 2.0+)
-if hasattr(torch, 'compile'):
-    print("Compiling model with torch.compile() for optimized inference...")
-    model = torch.compile(model, mode='reduce-overhead')
-    print("Model compilation complete.")
-else:
-    print("torch.compile() not available (requires PyTorch 2.0+), skipping compilation.")
-
 get_parameter_number(model)
 
 # initialize a trainer instance and kick off training

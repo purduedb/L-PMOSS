@@ -66,7 +66,7 @@ parser.add_argument('--n_head', type=int, default=8, help='Number of attention h
 parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 
-# changed kb_b for idx kb and kbs to kbs_train
+# changed kb_b for idxkb and kbs to kbs_train
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
@@ -193,7 +193,7 @@ for p in [
     "amd_epyc7543_2s_8n",
     "amd_epyc7543_2s_2n", 
     "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
+    # "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -350,15 +350,6 @@ if model_path is not None:
             state_dict[k] = v
     model.load_state_dict(state_dict, strict = True)
 model.eval()
-
-# Compile model for faster inference (PyTorch 2.0+)
-if hasattr(torch, 'compile'):
-    print("Compiling model with torch.compile() for optimized inference...")
-    model = torch.compile(model, mode='reduce-overhead')
-    print("Model compilation complete.")
-else:
-    print("torch.compile() not available (requires PyTorch 2.0+), skipping compilation.")
-
 get_parameter_number(model)
 
 # initialize a trainer instance and kick off training

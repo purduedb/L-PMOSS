@@ -58,20 +58,21 @@ assistant_model_nvidia_gh_1s_1n_v1="/scratch/gilbreth/yrayhan/save_models/nvidia
 # done
 
 # For inference
-wk_list=(11)
-sidx_list=(-2)
-for i in "${!wk_list[@]}"; do
-  wk=${wk_list[$i]}
-  sidx=${sidx_list[$i]}
+# wk_list=(11)
+# sidx_list=(-2)
+# for i in "${!wk_list[@]}"; do
+#   wk=${wk_list[$i]}
+#   sidx=${sidx_list[$i]}
 
-  python run_dt_place.py \
-    --mpath "$base_model_wo_ibm" \
-    --wl "$wk" \
-    --ecfg 100 \
-    --sidx "$sidx" \
-    --is_eval_only \
-    --rtg 2
-done
+#   python run_dt_place.py \
+#     --mpath "$base_model_wo_ibm" \
+#     --wl "$wk" \
+#     --ecfg 100 \
+#     --sidx "$sidx" \
+#     --is_eval_only \
+#     --rtg 2
+# done
+
 # For pre-training 
 # python run_dt_place.py \
 #   --mpath "$base_model_wo_ibm" \
@@ -80,4 +81,12 @@ done
 #   --sidx 200 \
 #   --rtg 2
 
+
+# For pre-training 
+python run_dt_place.py \
+  --mpath "None" \
+  --wl 11 \
+  --ecfg 100 \
+  --sidx 200 \
+  --rtg 2
 
