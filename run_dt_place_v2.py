@@ -160,10 +160,10 @@ nmf=24
 glb_exp_config = []
 for p in [
     "intel_skx_4s_8n", 
-    # "amd_epyc7543_2s_8n",
-    # "amd_epyc7543_2s_2n", 
+    "amd_epyc7543_2s_8n",
+    "amd_epyc7543_2s_2n", 
     # "intel_sb_4s_4n",
-    # "nvidia_gh_1s_1n",
+    "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
@@ -313,28 +313,12 @@ model = GPT(mconf, exp_config)
 
 if model_path is not None:
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
-
-    # Clean state dict: remove prefixes from DataParallel and torch.compile
-    cleaned_state_dict = {}
-    for k, v in state_dict.items():
-        # Remove _orig_mod. prefix (from torch.compile)
-        if k.startswith("_orig_mod."):
-            k = k.replace("_orig_mod.", "")
-        # Remove module. prefix (from DataParallel)
-        if k.startswith("module."):
-            k = k.replace("module.", "")
-        cleaned_state_dict[k] = v
-
-    # Try to load with strict=False to handle potential BatchNorm mismatches
-    # (e.g., num_batches_tracked is saved but not always needed)
-    missing_keys, unexpected_keys = model.load_state_dict(cleaned_state_dict, strict=False)
-
-    # Check if there are any critical missing keys (ignore BatchNorm tracking keys)
-    critical_missing = [k for k in missing_keys if 'num_batches_tracked' not in k]
-    if critical_missing:
-        print(f"Warning: Missing keys in checkpoint: {critical_missing[:10]}...")
-    if unexpected_keys:
-        print(f"Warning: Unexpected keys in checkpoint: {unexpected_keys[:10]}...")
+    for k,v in state_dict.items():
+        if "module." in k:
+            state_dict[k.split('.', 1)[1]] = v
+        else:
+            state_dict[k] = v
+    model.load_state_dict(state_dict, strict = True)
 model.eval()
 
 # Compile model for faster inference (PyTorch 2.0+)

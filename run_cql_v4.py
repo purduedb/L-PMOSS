@@ -7,7 +7,8 @@ import os
 import logging
 import argparse
 import time
-import math
+# Suppress d3rlpy verbose output
+# os.environ['D3RLPY_DISABLE_TQDM'] = '1'
 from mingpt.utils import set_seed
 import numpy as np
 import pandas as pd
@@ -22,52 +23,55 @@ from d3rlpy.metrics import *
 import torch
 import numpy as np
 from yr_utils import *
-import torch.nn as nn
-from d3rlpy.models.encoders import Encoder
 from d3rlpy.models.encoders import EncoderFactory
-from d3rlpy.logging import LoggerAdapterFactory
 from d3rlpy.optimizers.optimizers import AdamFactory
 from d3rlpy.optimizers.lr_schedulers import CosineAnnealingLRFactory
+import torch.nn as nn
+from d3rlpy.logging import NoopAdapterFactory
 from d3rlpy.constants import LoggingStrategy
 
-class SilentAdapter(LoggerAdapterFactory):
-    def create(self, *args, **kwargs):
-        class _SilentLogger:
-            def __getattr__(self, name):
-                # any call like logger.info(...), logger.add_scalar(...), etc.
-                return lambda *a, **kw: None
-        return _SilentLogger()
-    
-def get_parameter_number(bc_model):
-    """Count all trainable parameters in BC model"""
-    if bc_model.impl is None:
-        print("BC model not built yet")
+def get_parameter_number(cql_model):
+    """Count all trainable parameters in CQL model (Q-networks)"""
+    if cql_model.impl is None:
+        print("CQL model not built yet")
         return
 
     total_params = 0
 
-    # Count imitator (policy) parameters
-    if hasattr(bc_model.impl, '_modules') and hasattr(bc_model.impl._modules, 'imitator'):
-        imitator = bc_model.impl._modules.imitator
+    # Count Q-function parameters (CQL has n_critics Q-networks)
+    if hasattr(cql_model.impl, '_modules') and hasattr(cql_model.impl._modules, 'q_funcs'):
+        q_funcs = cql_model.impl._modules.q_funcs
 
-        # Encoder parameters
-        if hasattr(imitator, '_encoder'):
-            encoder_params = sum(p.numel() for p in imitator._encoder.parameters() if p.requires_grad)
-            print(f"  Encoder: {encoder_params:,} parameters")
-            total_params += encoder_params
+        for i, q_func in enumerate(q_funcs):
+            # Try to break down encoder vs head
+            encoder_params = 0
+            head_params = 0
 
-        # Policy head parameters (after encoder)
-        if hasattr(imitator, '_fc'):
-            head_params = sum(p.numel() for p in imitator._fc.parameters() if p.requires_grad)
-            print(f"  Policy Head: {head_params:,} parameters")
-            total_params += head_params
+            if hasattr(q_func, '_encoder'):
+                encoder_params = sum(p.numel() for p in q_func._encoder.parameters() if p.requires_grad)
 
-        # If we can't break it down, just count all imitator params
-        if total_params == 0:
-            total_params = sum(p.numel() for p in imitator.parameters() if p.requires_grad)
-            print(f"  Imitator (total): {total_params:,} parameters")
+            if hasattr(q_func, '_fc'):
+                head_params = sum(p.numel() for p in q_func._fc.parameters() if p.requires_grad)
 
-    print(f"BC Model Total Trainable Parameters: {total_params:,}")
+            q_total = sum(p.numel() for p in q_func.parameters() if p.requires_grad)
+
+            if encoder_params > 0 or head_params > 0:
+                print(f"  Q-function {i+1}:")
+                print(f"    Encoder: {encoder_params:,} parameters")
+                print(f"    Head: {head_params:,} parameters")
+                print(f"    Total: {q_total:,} parameters")
+            else:
+                print(f"  Q-function {i+1}: {q_total:,} parameters")
+
+            total_params += q_total
+
+    # Count target Q-networks (not trainable, but exist)
+    if hasattr(cql_model.impl, '_modules') and hasattr(cql_model.impl._modules, 'targ_q_funcs'):
+        targ_q_funcs = cql_model.impl._modules.targ_q_funcs
+        target_params = sum(sum(p.numel() for p in targ_q.parameters()) for targ_q in targ_q_funcs)
+        print(f"  Target Q-networks: {target_params:,} parameters (not trainable, updated via polyak)")
+
+    print(f"CQL Model Total Trainable Parameters: {total_params:,}")
     return total_params
 
 
@@ -89,7 +93,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=123)
 parser.add_argument('--context_length', type=int, default=100)  # my=> 100 in stead of 256
 parser.add_argument('--epochs', type=int, default=100)
-parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--batch_size', type=int, default=512)
 parser.add_argument('--cuda', type=str, default='0')
 parser.add_argument('--is_eval_only', action='store_true')
 parser.add_argument('--no_eval_only', action='store_false')
@@ -101,7 +105,7 @@ parser.add_argument('--wl', type=int, default=11)
 parser.add_argument('--ecfg', type=int, default=30)
 parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
-parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/_d3rlpy_bc_models/2025-10-07-23-01-12-0.553.pt")
+parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/model.d3")
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b")  # kb_b__ was for amd with the fsanitizer stuff
 parser.add_argument('--ablation_study', action='store_true', help='Enable ablation study mode')
@@ -115,7 +119,7 @@ parser.add_argument('--n_head', type=int, default=8, help='Number of attention h
 parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 parser.add_argument('--finetuning', action='store_true', help='Enable finetuning mode (saves models to separate directory)')
-parser.add_argument('--save_path', type=str, default='/scratch/gilbreth/yrayhan/save_models/_d3rlpy_bc_models/', help='Directory to save trained models')
+parser.add_argument('--save_path', type=str, default='/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/', help='Directory to save trained models')
 
 # changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
@@ -296,7 +300,7 @@ for i in range(n_samples):
     obs_s_flat = obss_s[i].flatten()  # Shape: (grid*grid*features,)
     obs_mask_flat = obss_mask[i].flatten()  # Shape: (grid*grid,)
     meta_data_flat = meta_data[i].flatten()  # Shape: (num_meta_features,)
-    
+
     # Concatenate all observation components
     full_obs = np.concatenate([obs_flat, obs_s_flat, obs_mask_flat, meta_data_flat])
     observations.append(full_obs)
@@ -317,6 +321,16 @@ observations = np.array(observations, dtype=np.float32)
 d3rl_actions = np.array(d3rl_actions, dtype=np.int64)
 d3rl_rewards = np.array(d3rl_rewards, dtype=np.float32).flatten()
 d3rl_terminals = np.array(d3rl_terminals, dtype=bool)
+
+# CRITICAL FIX: Normalize rewards to prevent Q-value explosion
+print(f"Raw reward statistics: min={d3rl_rewards.min():.2f}, max={d3rl_rewards.max():.2f}, mean={d3rl_rewards.mean():.2f}, std={d3rl_rewards.std():.2f}")
+reward_mean = d3rl_rewards.mean()
+reward_std = d3rl_rewards.std() + 1e-8  # Add epsilon to avoid division by zero
+d3rl_rewards = (d3rl_rewards - reward_mean) / reward_std
+# Clip to reasonable range [-10, 10]
+d3rl_rewards = np.clip(d3rl_rewards, -10.0, 10.0)
+print(f"Normalized reward statistics: min={d3rl_rewards.min():.2f}, max={d3rl_rewards.max():.2f}, mean={d3rl_rewards.mean():.2f}, std={d3rl_rewards.std():.2f}")
+
 
 # Force action space to be 96 by adding dummy transitions for unused actions
 unique_actions = np.unique(d3rl_actions)
@@ -366,30 +380,30 @@ print("=========================================================================
 
 # Completely disable all logging except CRITICAL errors
 logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.CRITICAL,  # Changed from INFO to CRITICAL
+    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.CRITICAL,  # Changed from INFO to CRITICAL
 )
 
-# Disable d3rlpy logging completely
-logging.getLogger('d3rlpy').disabled = True
-logging.getLogger('d3rlpy.algos').disabled = True
-logging.getLogger('d3rlpy.metrics').disabled = True
-logging.getLogger('d3rlpy.dataset').disabled = True
-logging.getLogger('d3rlpy.models').disabled = True
-logging.getLogger('d3rlpy.preprocessing').disabled = True
-logging.getLogger('d3rlpy.gpu').disabled = True
+# Enable d3rlpy logging to capture in output file
+logging.getLogger('d3rlpy').setLevel(logging.INFO)
+logging.getLogger('d3rlpy.algos').setLevel(logging.INFO)
+logging.getLogger('d3rlpy.metrics').setLevel(logging.INFO)
+logging.getLogger('d3rlpy.dataset').setLevel(logging.INFO)
+logging.getLogger('d3rlpy.models').setLevel(logging.INFO)
+logging.getLogger('d3rlpy.preprocessing').setLevel(logging.INFO)
+logging.getLogger('d3rlpy.gpu').setLevel(logging.INFO)
+# Keep progress bars disabled to avoid messy output in file
 
-
-# D3RLPY Behavior Cloning Setup
+# D3RLPY Conservative Q-Learning Setup
 print("============================================================================================================")
-print("Setting up d3rlpy Behavior Cloning...")
+print("Setting up d3rlpy Conservative Q-Learning (CQL)...")
 
 # Action space size already determined above
 print(f"Action space size: {action_space_size}")
 
-# Setup d3rlpy Discrete BC algorithm
 class PMOSSStateEncoder(nn.Module):
+    """Original lightweight encoder (~90K params per Q-network)"""
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
         super().__init__()
         chassis_dimx = cd[0]
@@ -401,46 +415,19 @@ class PMOSSStateEncoder(nn.Module):
 
         self.state_encoder_s = nn.Sequential(
             nn.Conv2d(self.c, 16, 8, stride=2, padding=1),
-            nn.BatchNorm2d(16),
             nn.ReLU(),
-            
             nn.Conv2d(16, 32, 4, stride=2, padding=1),
-            nn.BatchNorm2d(32),
             nn.ReLU(),
-
             nn.Conv2d(32, 16, 3, stride=2, padding=1),
-            nn.BatchNorm2d(16),
             nn.ReLU(),
-            
-            nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-    
-            nn.Linear(16, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 512),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, 1024),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(1024, 2048),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(2048, n_embd)
+            nn.Linear(16, n_embd),
         )
 
         self.meta_encoder_s = nn.Sequential(
-            nn.Linear(self.num_mfeatures+2, 128),
+            nn.Linear(self.num_mfeatures+2, 32),
             nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 512),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, self.num_mfeatures)
+            nn.Linear(32, self.num_mfeatures)
             )
 
     def forward(self, x):
@@ -487,10 +474,7 @@ class PMOSSStateEncoder_v2(nn.Module):
             
             nn.Flatten(),
     
-            nn.Linear(16, n_embd-self.num_mfeatures),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(n_embd-self.num_mfeatures, 256),
+            nn.Linear(16, 256),
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(256, 512),
@@ -502,10 +486,7 @@ class PMOSSStateEncoder_v2(nn.Module):
             nn.Linear(1024, 2048),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(2048, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, n_embd)
+            nn.Linear(2048, n_embd),
         )
 
         self.meta_encoder_s = nn.Sequential(
@@ -538,151 +519,10 @@ class PMOSSStateEncoder_v2(nn.Module):
         state_embeddings = nn.Tanh()(state_embeddings)
 
         return state_embeddings
-
-
-# Setup d3rlpy Discrete BC algorithm
-class PMOSSStateEncoder_v3(nn.Module):
-    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
-        super().__init__()
-        chassis_dimx = cd[0]
-        chassis_dimy = cd[1]
-
-        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (3 + num_features, 64, 64)
-        self.num_features = num_features
-        self.num_mfeatures = num_mfeatures
-
-        self.state_encoder_s = nn.Sequential(
-            nn.Conv2d(self.c, 16, 8, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            
-            nn.Conv2d(16, 32, 4, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-
-            nn.Conv2d(32, 16, 3, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-    
-            nn.Linear(16, 32),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(32, 512),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, 1024),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(1024, 2048),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(2048, n_embd)
-        )
-
-        self.meta_encoder_s = nn.Sequential(
-            nn.Linear(self.num_mfeatures+2, 128),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 512),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, self.num_mfeatures)
-            )
-
-    def forward(self, x):
-        x1_ = x[:, :self.c*self.h*self.w]
-        x2_ = x[:, self.c*self.h*self.w:]
-
-        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
-        state_embeddings = self.state_encoder_s(x1_)
-
-        if not(self.num_mfeatures == 0):
-            meta_embeddings = self.meta_encoder_s(
-                x2_.reshape(-1, self.num_mfeatures+2)
-                )
-            # print(meta_embeddings.shape, state_embeddings.shape)
-            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
-
-        state_embeddings = nn.Tanh()(state_embeddings)
-
-        return state_embeddings
-    
-
-class PMOSSStateEncoder_v4(nn.Module):
-    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
-        super().__init__()
-        chassis_dimx = cd[0]
-        chassis_dimy = cd[1]
-
-        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (3 + num_features, 64, 64)
-        self.num_features = num_features
-        self.num_mfeatures = num_mfeatures
-
-        self.state_encoder_s = nn.Sequential(
-            nn.Conv2d(self.c, 16, 8, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            
-            nn.Conv2d(16, 32, 4, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-
-            nn.Conv2d(32, 16, 3, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-    
-            nn.Linear(16, 512),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, 1024),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(1024, n_embd)
-        )
-
-        self.meta_encoder_s = nn.Sequential(
-            nn.Linear(self.num_mfeatures+2, 128),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 512),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, self.num_mfeatures)
-            )
-
-    def forward(self, x):
-        x1_ = x[:, :self.c*self.h*self.w]
-        x2_ = x[:, self.c*self.h*self.w:]
-
-        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
-        state_embeddings = self.state_encoder_s(x1_)
-
-        if not(self.num_mfeatures == 0):
-            meta_embeddings = self.meta_encoder_s(
-                x2_.reshape(-1, self.num_mfeatures+2)
-                )
-            # print(meta_embeddings.shape, state_embeddings.shape)
-            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
-
-        state_embeddings = nn.Tanh()(state_embeddings)
-
-        return state_embeddings
-
 
 
 class PMOSSStateEncoderLarge(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
         super().__init__()
         chassis_dimx = cd[0]
@@ -692,40 +532,40 @@ class PMOSSStateEncoderLarge(nn.Module):
         self.num_features = num_features
         self.num_mfeatures = num_mfeatures
 
-        # Optimized CNN - tuned to hit ~3.69M params
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
         self.state_encoder_s = nn.Sequential(
-            # Layer 1: 18 -> 64 channels
-            nn.Conv2d(self.c, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
             nn.ReLU(),
 
-            # Layer 2: 64 -> 128 channels
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
             nn.ReLU(),
 
-            # Layer 3: 128 -> 256 channels
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
             nn.ReLU(),
 
-            # Layer 4: 256 -> 512 channels
-            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
+            # Layer 4: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
             nn.ReLU(),
 
             # Global average pooling to get fixed size regardless of input spatial dims
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
 
-            # Dense layers - larger to hit ~3.69M params
-            nn.Linear(512, 1152),
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(384, 768),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(1152, 896),
+            nn.Linear(768, 512),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(896, n_embd),
+            nn.Linear(512, n_embd),
         )
 
         # Meta encoder - balanced capacity
@@ -740,7 +580,7 @@ class PMOSSStateEncoderLarge(nn.Module):
             nn.ReLU(),
             nn.Linear(128, self.num_mfeatures)
         )
-
+    
     def forward(self, x):
         x1_ = x[:, :self.c*self.h*self.w]
         x2_ = x[:, self.c*self.h*self.w:]
@@ -760,6 +600,8 @@ class PMOSSStateEncoderLarge(nn.Module):
 
 
 class PMOSSStateEncoderLarge_v2(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
         super().__init__()
         chassis_dimx = cd[0]
@@ -769,45 +611,55 @@ class PMOSSStateEncoderLarge_v2(nn.Module):
         self.num_features = num_features
         self.num_mfeatures = num_mfeatures
 
-        # Optimized CNN - tuned to hit ~3.69M params  
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
         self.state_encoder_s = nn.Sequential(
-            nn.Conv2d(self.c, 64, kernel_size=8, stride=2, padding=1),
-            nn.BatchNorm2d(64),
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
             nn.ReLU(),
 
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(128),
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
             nn.ReLU(),
 
-            # Layer 3: 128 -> 256 channels
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
             nn.ReLU(),
-            
+
+            # Layer 4: 192 -> 16 channels
+            nn.Conv2d(192, 16, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+
             # Global average pooling to get fixed size regardless of input spatial dims
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            
-            nn.Linear(256, 512),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(16, 64),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(512, 1024),
+            nn.Linear(64, 512),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(1024, 2048),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(2048, n_embd)
+            nn.Linear(512, n_embd),
         )
 
         # Meta encoder - balanced capacity
         self.meta_encoder_s = nn.Sequential(
-            nn.Linear(self.num_mfeatures+2, 32),
+            nn.Linear(self.num_mfeatures+2, 128),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(32, self.num_mfeatures)
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
         )
-
+    
     def forward(self, x):
         x1_ = x[:, :self.c*self.h*self.w]
         x2_ = x[:, self.c*self.h*self.w:]
@@ -826,8 +678,250 @@ class PMOSSStateEncoderLarge_v2(nn.Module):
         return state_embeddings
 
 
+class PMOSSStateEncoderLarge_v3(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
+            nn.ReLU(),
+
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 4: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(384, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, n_embd),
+        )
+
+        # Meta encoder - balanced capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
+class PMOSSStateEncoderLarge_v4(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
+            nn.ReLU(),
+
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 4: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(384, 32),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(32, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 2048),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(2048, n_embd),
+        )
+
+        # Meta encoder - balanced capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
+class PMOSSStateEncoderLarge_v5(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
+            nn.ReLU(),
+
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 4: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(384, 64),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(64, 2048),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(2048, n_embd),
+        )
+
+        # Meta encoder - balanced capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
+
+
 class PMOSSStateEncoderXL(nn.Module):
-    """Extra-large encoder to match DT's ~3.69M parameters"""
+    """Extra-large encoder to match DT's ~3.69M parameters (per Q-network for CQL)"""
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
         super().__init__()
         chassis_dimx = cd[0]
@@ -863,7 +957,7 @@ class PMOSSStateEncoderXL(nn.Module):
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
 
-            # Dense layers - reduced size to hit ~3.69M total
+            # Dense layers - reduced size to hit ~3.69M per Q-network
             nn.Linear(512, 1024),
             nn.ReLU(),
             nn.Dropout(0.1),
@@ -904,6 +998,7 @@ class PMOSSStateEncoderXL(nn.Module):
         return state_embeddings
 
 
+# Setup d3rlpy Discrete CQL algorithm
 class PMOSSStateEncoderFactory(EncoderFactory):
     TYPE = "pmoss_state"
 
@@ -917,20 +1012,22 @@ class PMOSSStateEncoderFactory(EncoderFactory):
     def create(self, observation_shape):
         print(observation_shape)
         if self.use_xl:
-            print("Using PMOSSStateEncoderXL (~3.69M params to match DT)")
+            print("Using PMOSSStateEncoderXL (~3.69M params per Q-network, ~7.4M total for CQL with 2 Q-networks)")
             return PMOSSStateEncoderXL(observation_shape, self.n_embd, self.num_features,
                                        self.num_meta_features)
         elif self.use_large:
-            print("Using PMOSSStateEncoderLarge (~3.69M params to match DT)")
+            print("Using PMOSSStateEncoderLarge (~1.845M params per Q-network, 3.69M total for CQL)")
+            # return PMOSSStateEncoderLarge(observation_shape, self.n_embd, self.num_features,
+            #                               self.num_meta_features)
             return PMOSSStateEncoderLarge_v2(observation_shape, self.n_embd, self.num_features,
                                           self.num_meta_features)
         else:
-            print("Using PMOSSStateEncoder (~90K params)")
+            print("Using PMOSSStateEncoder (~90K params per Q-network, ~180K total for CQL)")
             # return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features,
             #                          self.num_meta_features)
-            return PMOSSStateEncoder_v3(observation_shape, self.n_embd, self.num_features,
+            return PMOSSStateEncoder_v2(observation_shape, self.n_embd, self.num_features,
                                      self.num_meta_features)
-    
+
     def get_type(self):
         return self.TYPE
 
@@ -939,8 +1036,8 @@ encoder_factory = PMOSSStateEncoderFactory(
     n_embd=args.n_embd,
     num_features=nf,
     num_meta_features=nmf,
-    use_large=False,
-    use_xl=False  # Use XL encoder to match DT's 3.69M params
+    use_large=True,
+    use_xl=False  # Use XL encoder to match DT's capacity
 )
 
 # Calculate training steps first (needed for LR scheduler)
@@ -949,6 +1046,7 @@ n_steps_per_epoch = samples_per_epoch // args.batch_size
 n_epochs = args.epochs
 n_steps = n_epochs * n_steps_per_epoch
 save_interval = n_steps_per_epoch * 1
+min_accuracy_threshold = 0.001
 
 # Use different save paths for finetuning vs training from scratch
 if args.finetuning:
@@ -959,61 +1057,59 @@ else:
     print("Training mode - models will be saved to:", model_save_path)
 
 os.makedirs(model_save_path, exist_ok=True)
-print(n_steps, n_steps_per_epoch, save_interval)
 
-# Determine learning rate based on whether we're loading a checkpoint
-initial_lr = 6e-4 if model_path is not None and os.path.exists(model_path) else 6e-4
-
-bc_config = d3rlpy.algos.DiscreteBCConfig(
-    learning_rate=initial_lr,
+cql_config = d3rlpy.algos.DiscreteCQLConfig(
+    learning_rate=5e-4,               # Reduced from 9e-4 for stability
     batch_size=args.batch_size,
     encoder_factory=encoder_factory,
     optim_factory=AdamFactory(
-        weight_decay=0.0,
-        lr_scheduler_factory=CosineAnnealingLRFactory(T_max=n_steps, eta_min=6e-5)  # Cosine decay
+        weight_decay=0.0,             # CRITICAL: Remove weight decay
+        lr_scheduler_factory=CosineAnnealingLRFactory(T_max=n_steps, eta_min=6e-5)  # Cosine decay: 6e-4 -> 6e-5 (10% min)
     ),
-    beta=0.5  # Label smoothing: helps prevent overconfidence (default is 1.0)
+    alpha=0.5,                        # Reduced CQL penalty (was 1.0) Reduce alpha further: 0.5 → 0.3 (less conservative)
+    gamma=0.95,                       # Lower discount to reduce Q-value propagation (was 0.99) Increase gamma: 0.95 → 0.97 (longer horizon)
+    n_critics=2,                      # Number of Q-networks for conservative estimation
+    target_update_interval=10000,     # More frequent updates (was 8000)
 )
-
-# Print training mode information
-if model_path and os.path.exists(model_path):
-    mode_str = "fine-tuning" if args.finetuning else "resuming training"
-    print(f"Using initial learning rate: {initial_lr} ({mode_str} from checkpoint)")
-else:
-    print(f"Using initial learning rate: {initial_lr} (training from scratch)")
-bc = bc_config.create(
+cql = cql_config.create(
     device='cuda:0' if torch.cuda.is_available() else 'cpu'
     )
 
 # Load checkpoint if model_path is provided
 if model_path is not None and os.path.exists(model_path):
-    print(f"Loading BC checkpoint from: {model_path}")
-    bc.build_with_dataset(dataset)
-    bc.load_model(model_path)
-    print("BC checkpoint loaded successfully! Resuming training...")
+    print(f"Loading CQL checkpoint from: {model_path}")
+    cql.build_with_dataset(dataset)
+    cql.load_model(model_path)
+    print("CQL checkpoint loaded successfully! Resuming training...")
 else:
-    bc.build_with_dataset(dataset)
+    cql.build_with_dataset(dataset)
 
 discrete_action_match_evaluator = d3rlpy.metrics.DiscreteActionMatchEvaluator()
-print(type(bc.impl))
-print(bc)
+td_error_evaluator = d3rlpy.metrics.TDErrorEvaluator()
+value_scale_evaluator = d3rlpy.metrics.AverageValueEstimationEvaluator()
+print(type(cql.impl))
+print(cql)
 
-
-# Print parameter count (model already built above)
-print("\n========== BC Model Parameters ==========")
-get_parameter_number(bc)
-print("=========================================\n")
+# Print parameter count
+print("\n========== CQL Model Parameters ==========")
+get_parameter_number(cql)
+print("==========================================\n")
 # exit(0)
 
 # ========== TRAINING MODE ========== #
 if not(args.is_eval_only):
-    print("Starting d3rlpy Behavior Cloning training with accuracy-based saving...")
-    def save_checkpoint_callback(bc_model, step, epoch, evaluator, save_dir, min_accuracy):
-        # Get current learning rate from optimizer
+    print("Starting d3rlpy Conservative Q-Learning training...")
+
+    # Track best accuracy across training
+    best_accuracy = 0.0
+    def save_checkpoint_callback(cql_model, step, epoch, evaluators, save_dir, min_accuracy=min_accuracy_threshold):
+        global best_accuracy
         current_lr = None
-        if hasattr(bc_model.impl, '_optim') and bc_model.impl._optim is not None:
-            current_lr = bc_model.impl._optim.param_groups[0]['lr']
-        accuracy = evaluator(bc_model, dataset)
+        if hasattr(cql_model.impl, '_optim') and cql_model.impl._optim is not None:
+            current_lr = cql_model.impl._optim.param_groups[0]['lr']
+
+        # Compute multiple metrics for CQL evaluation
+        accuracy = evaluators['action_match'](cql_model, dataset)
         timestamp = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 
         # Print with learning rate
@@ -1022,49 +1118,62 @@ if not(args.is_eval_only):
         else:
             print(f"Epoch {epoch} | Accuracy: {accuracy:.4f} ({accuracy:.1%})")
 
-        # Build custom filename
-        if accuracy >= min_accuracy:
+        # Save only if accuracy improved
+        if accuracy > best_accuracy:
             filename = f"{timestamp}-{accuracy:.3f}.d3"
             path = os.path.join(save_dir, filename)
-            bc_model.save_model(path)
+            cql_model.save_model(path)
             print(f"Saved checkpoint: {path}")
-        else:
-            filename = f"{timestamp}-{accuracy:.3f}_lowaccuracy.d3"
+            best_accuracy = accuracy
     
-    logging.getLogger("d3rlpy").setLevel(logging.ERROR)  
-    logging.getLogger("d3rlpy").propagate = False
-    bc.fit(
+    cql.fit(
         dataset,
         n_steps=n_steps,
         n_steps_per_epoch=n_steps_per_epoch,
-        evaluators={'action_match': discrete_action_match_evaluator},
+        save_interval=1e15,  # Disable auto-saving (only save via callback)
+        logging_steps=1e15,
+        logging_strategy=LoggingStrategy.EPOCH,
         experiment_name=None,
         with_timestamp=False,
+        evaluators={
+            'action_match': discrete_action_match_evaluator,
+        },
         epoch_callback=lambda model, step, epoch: save_checkpoint_callback(
-            bc_model=model,
+            cql_model=model,
             step=step,
             epoch=epoch,
-            evaluator=discrete_action_match_evaluator,
+            evaluators={
+                'action_match': discrete_action_match_evaluator,
+            },
             save_dir=model_save_path,
             min_accuracy=0.1
         ),
-        save_interval=10000000,
-        logging_steps=1e15,
-        logging_strategy=LoggingStrategy.EPOCH,
-        logger_adapter=SilentAdapter(),
-        show_progress=False
+        show_progress=False,  # Disable tqdm progress bars
+        logger_adapter=NoopAdapterFactory(),
     )
     
-    print("Training completed. Evaluating final model...")
+    print("CQL training completed. Evaluating final model...")
     
-    final_score = discrete_action_match_evaluator(bc, dataset)
+    final_score = discrete_action_match_evaluator(cql, dataset)
+    final_td_error = td_error_evaluator(cql, dataset)
+    final_avg_value = value_scale_evaluator(cql, dataset)
     print(f"Final action match accuracy: {final_score:.4f} ({final_score:.1%})")
+    print(f"Final TD error: {final_td_error:.6f}")
+    print(f"Final avg value estimation: {final_avg_value:.6f}")
     
+    exit(0)
 
 
 obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
     = gen_token_for_eval_for_all(glb_exp_config)
+cql.build_with_dataset(dataset)
 
+# Print CQL model parameters
+get_parameter_number(cql.impl)
+
+cql.load_model(model_path)
+print("CQL model loaded successfully!")
+print("Evaluating CQL model with DT-style policy rollout...")
 context_length = glb_exp_config[0].cnt_grid_cells
 test_dataset = StateActionReturnDataset(
     glb_exp_config[0],
@@ -1072,16 +1181,16 @@ test_dataset = StateActionReturnDataset(
     done_idxs_, rtgs_, timesteps_, meta_data_, obss_s_,
     obss_mask_, benchmarks_, stepwise_returns_, lengths_
 )
-print("Using loaded BC model for evaluation (inference mode)..." if args.is_eval_only else "Using best/final BC model for evaluation (training completed)...")
-print(f"Model path: {model_path if args.is_eval_only else 'N/A'}")
+print("Using loaded CQL model for evaluation (inference mode)..." if args.is_eval_only else "Using best/final CQL model for evaluation (training completed)...")
+print(f"Model path: {model_path if args.is_eval_only else final_model_path}")
 
 # =====================
-# DT-style BC policy evaluation (true empty-state rollout)
+# DT-style CQL policy evaluation (true empty-state rollout)
 # =====================
-def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
+def evaluate_cql_policy_rollout_dt_style(cql_model, exp_config, test_dataset):
     """
-    DT-style sequential rollout for BC model: start from empty state, sequentially predict actions, update state with env_update,
-    and compute action match accuracy. Closely mimics Decision Transformer evaluation.
+    DT-style sequential rollout for CQL model: start from empty state, sequentially predict actions, update state with env_update,
+    and compute action match accuracy. Uses CQL Q-function for action selection with masking.
     Returns accuracy and predicted action sequences.
     """
     loader = DataLoader(test_dataset, shuffle=True, pin_memory=True,
@@ -1158,8 +1267,7 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     meta_state = meta_state.type(torch.float32).to(device).unsqueeze(0)
 
     # Set model to evaluation mode (disables dropout, batchnorm updates)
-    # For d3rlpy models, need to access the underlying PyTorch modules
-    bc_model.impl._modules.imitator.eval()  # CRITICAL: Must set to eval mode for BatchNorm with batch_size=1
+    # cql_model.eval()
 
     # state_obs_mask = torch.zeros((1, chassis_dimx, chassis_dimy), dtype=torch.bool, device=device)
     # state = torch.cat((state_obs, state_obs_s, state_obs_mask), 0).view(-1, chassis_dimx, chassis_dimy)
@@ -1170,8 +1278,7 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     # obs_mask_core = torch.ones(chassis_dimx * chassis_dimy, dtype=torch.int32)
     pred_actions = []
     done = False
-    # Log time of this prediction
-    start_time = time.time()
+
     # --- Rollout loop ---
     rtgs = [0.0]
     current_rtg = torch.tensor(rtgs)
@@ -1183,18 +1290,23 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
         # Concatenate on GPU
         obs_tensor = torch.cat([state_, meta_state_], dim=1)
         
-        # action = bc_model.predict(obs)[0]
+        # Use CQL Q-function for action selection
         with torch.no_grad():
-            logits = bc_model.impl._modules.imitator(obs_tensor).logits
-            mask_tensor = torch.from_numpy(np.array(obs_mask_core) == 0).float().to(logits.device)
-            logits = logits - 1.0e8 * mask_tensor
-            logits_actions = logits.argmax(dim=1)
-            
+            # For CQL, we use the Q-function to get Q-values for all actions
+            q_values = cql_model.impl._modules.q_funcs[0](obs_tensor)  # Use first Q-function
+            q_tensor = q_values.q_value
+            mask_tensor = torch.from_numpy(np.array(obs_mask_core) == 0).float().to(q_tensor.device)
+            # Apply masking: set invalid actions to very low Q-values
+            q_tensor = q_tensor - 1.0e8 * mask_tensor
+            # Select action with highest Q-value (greedy policy)
+            logits_actions = q_tensor.argmax(dim=1)
+
         if isinstance(logits_actions, int):
             pred_actions += [logits_actions]
         else:
             pred_actions += [logits_actions.item()]
-        
+        print(pred_actions)
+
         state, current_rtg, done, meta_state, obs_mask_core = env_update(
             x, m_x, st,  
             pred_actions, state, meta_state, current_rtg, exp_config,
@@ -1208,11 +1320,10 @@ def evaluate_bc_policy_rollout_dt_style(bc_model, exp_config, test_dataset):
     retrieve_config(exp_config, pred_actions, args.sidx)
     print("REFINE ACTION")
     print("=====================ALL DONE!=====================")
-    print("Total rollout time:", time.time() - start_time)
     return 
 
 
-bc_actions = evaluate_bc_policy_rollout_dt_style(bc, glb_exp_config[0], test_dataset)
+cql_actions = evaluate_cql_policy_rollout_dt_style(cql, glb_exp_config[0], test_dataset)
 
 
 

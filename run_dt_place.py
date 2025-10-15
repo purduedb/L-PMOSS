@@ -142,36 +142,6 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-# p=args.p
-# cd=(1,1)
-# nf=-1
-# nmf=0
-# if p == "intel_skx_4s_8n":
-#     cd = (8,12)
-#     nf=15
-#     nmf=24  # 16 + 8 
-# elif p == "amd_epyc7543_2s_8n":
-#     cd = (8,8)
-#     nf=12
-#     nmf=0
-# elif p == "nvidia_gh_1s_1n":
-#     cd = (8,9)
-#     nf=12
-#     nmf=0
-# elif p == "amd_epyc7543_2s_2n":
-#     cd = (8,8)
-#     nf=12
-#     nmf=0
-#     # "Needs to be updated"
-# elif p == "intel_sb_4s_4n":
-#     cd = (8,8)
-#     nf=15
-#     nmf=16
-# elif p == "all":
-#     cd = (8,12)
-#     nf=15
-#     nmf=24
-
 workload = args.wl
 eval_start_cfg = args.ecfg
 save_idx = args.sidx
@@ -190,7 +160,7 @@ nmf=24
 glb_exp_config = []
 for p in [
     "intel_skx_4s_8n", 
-    "amd_epyc7543_2s_8n",
+    # "amd_epyc7543_2s_8n",
     "amd_epyc7543_2s_2n", 
     "intel_sb_4s_4n",
     "nvidia_gh_1s_1n",

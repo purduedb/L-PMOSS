@@ -9,8 +9,8 @@ conda activate pmoss
 
 # Task: prepare stuff for nvidia 
 
-python run_dt_place.py \
+python run_dt_place_v2.py \
   --mpath "None" \
   --wl 11 --ecfg 100 --sidx 200 --rtg 2 \
   --generalization_study \
-  --exclude_machine "amd_epyc7543_2s_8n" \
+  --exclude_machine "intel_sb_4s_4n" \

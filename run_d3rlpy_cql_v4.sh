@@ -2,17 +2,18 @@
 
 module load conda
 conda activate pmoss
-initial_load="/scratch/gilbreth/yrayhan/save_models/__d3rlpy_cql_models/2025-10-14-23-34-21-0.386.d3"
+
+initial_load="/scratch/gilbreth/yrayhan/save_models/-d3rlpy_cql_models/2025-10-15-13-27-19-0.120.d3" 
 # For pre-training 
-python run_cql.py \
-  --mpath "$initial_load" \
+python run_cql_v4.py \
+  --mpath "None" \
   --wl 11 \
   --ecfg 100 \
   --sidx 200 \
   --rtg 2 \
-  --n_embd 32 \
+  --n_embd 512 \
   --epochs 800 \
-  --save_path "/scratch/gilbreth/yrayhan/save_models/__d3rlpy_cql_models/"
+  --save_path "/scratch/gilbreth/yrayhan/save_models/-d3rlpy_cql_models/"
 
 # base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/2025-10-12-14-00-54-0.892.d3"
 

@@ -119,6 +119,7 @@ parser.add_argument('--n_head', type=int, default=8, help='Number of attention h
 parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 parser.add_argument('--finetuning', action='store_true', help='Enable finetuning mode (saves models to separate directory)')
+parser.add_argument('--save_path', type=str, default='/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/', help='Directory to save trained models')
 
 # changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
@@ -448,6 +449,78 @@ class PMOSSStateEncoder(nn.Module):
         return state_embeddings
 
 
+class PMOSSStateEncoder_v2(nn.Module):
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (3 + num_features, 64, 64)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        self.state_encoder_s = nn.Sequential(
+            nn.Conv2d(self.c, 16, 8, stride=2, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            
+            nn.Conv2d(16, 32, 4, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+
+            nn.Conv2d(32, 16, 3, stride=2, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            
+            nn.Flatten(),
+    
+            nn.Linear(16, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 2048),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(2048, n_embd),
+        )
+
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, self.num_mfeatures)
+            )
+
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            # print(meta_embeddings.shape, state_embeddings.shape)
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
 class PMOSSStateEncoderLarge(nn.Module):
     """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
@@ -524,6 +597,324 @@ class PMOSSStateEncoderLarge(nn.Module):
         state_embeddings = nn.Tanh()(state_embeddings)
 
         return state_embeddings
+
+
+class PMOSSStateEncoderLarge_v2(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
+            nn.ReLU(),
+
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 4: 192 -> 16 channels
+            nn.Conv2d(192, 16, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(16, 64),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(64, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, n_embd),
+        )
+
+        # Meta encoder - balanced capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
+class PMOSSStateEncoderLarge_v3(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
+            nn.ReLU(),
+
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 4: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(384, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, n_embd),
+        )
+
+        # Meta encoder - balanced capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
+class PMOSSStateEncoderLarge_v4(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
+            nn.ReLU(),
+
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 4: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(384, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 2048),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(2048, n_embd),
+        )
+
+        # Meta encoder - balanced capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
+class PMOSSStateEncoderLarge_v5(nn.Module):
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    """Scaled-up encoder for CQL (~1.845M params per Q-network, 3.69M total for 2 Q-networks)"""
+    def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
+        super().__init__()
+        chassis_dimx = cd[0]
+        chassis_dimy = cd[1]
+
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
+        self.num_features = num_features
+        self.num_mfeatures = num_mfeatures
+
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
+        self.state_encoder_s = nn.Sequential(
+            # Layer 1: 18 -> 48 channels
+            nn.Conv2d(self.c, 48, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(48),
+            nn.ReLU(),
+
+            # Layer 2: 48 -> 96 channels
+            nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(),
+
+            # Layer 3: 96 -> 192 channels
+            nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(192),
+            nn.ReLU(),
+
+            # Layer 4: 192 -> 384 channels
+            nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+
+            # Global average pooling to get fixed size regardless of input spatial dims
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(384, 64),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(64, 2048),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(2048, n_embd),
+        )
+
+        # Meta encoder - balanced capacity
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
+    def forward(self, x):
+        x1_ = x[:, :self.c*self.h*self.w]
+        x2_ = x[:, self.c*self.h*self.w:]
+
+        x1_ = x1_.view(x.size(0), self.c, self.h, self.w)
+        state_embeddings = self.state_encoder_s(x1_)
+
+        if not(self.num_mfeatures == 0):
+            meta_embeddings = self.meta_encoder_s(
+                x2_.reshape(-1, self.num_mfeatures+2)
+                )
+            state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
+
+        state_embeddings = nn.Tanh()(state_embeddings)
+
+        return state_embeddings
+
+
 
 
 class PMOSSStateEncoderXL(nn.Module):
@@ -623,21 +1014,21 @@ class PMOSSStateEncoderFactory(EncoderFactory):
                                        self.num_meta_features)
         elif self.use_large:
             print("Using PMOSSStateEncoderLarge (~1.845M params per Q-network, 3.69M total for CQL)")
-            return PMOSSStateEncoderLarge(observation_shape, self.n_embd, self.num_features,
+            # return PMOSSStateEncoderLarge(observation_shape, self.n_embd, self.num_features,
+            #                               self.num_meta_features)
+            return PMOSSStateEncoderLarge_v2(observation_shape, self.n_embd, self.num_features,
                                           self.num_meta_features)
         else:
             print("Using PMOSSStateEncoder (~90K params per Q-network, ~180K total for CQL)")
-            return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features,
+            # return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features,
+            #                          self.num_meta_features)
+            return PMOSSStateEncoder_v2(observation_shape, self.n_embd, self.num_features,
                                      self.num_meta_features)
 
     def get_type(self):
         return self.TYPE
 
-# encoder_factory = d3rlpy.models.DefaultEncoderFactory(dropout_rate=0.1)
-# Encoder options (CQL uses 2 Q-networks, so total = 2x per-network):
-#   use_xl=True: ~3.69M params per Q-network, ~7.4M total (matches 2x DT)
-#   use_large=True: ~1.845M params per Q-network, ~3.69M total (matches DT)
-#   both False: ~90K params per Q-network, ~180K total
+
 encoder_factory = PMOSSStateEncoderFactory(
     n_embd=args.n_embd,
     num_features=nf,
@@ -656,10 +1047,10 @@ min_accuracy_threshold = 0.001
 
 # Use different save paths for finetuning vs training from scratch
 if args.finetuning:
-    model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/" + glb_exp_config[0].processor + "/"
+    model_save_path = os.path.join(args.save_path, glb_exp_config[0].processor)
     print("Finetuning mode enabled - models will be saved to:", model_save_path)
 else:
-    model_save_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/"
+    model_save_path = args.save_path
     print("Training mode - models will be saved to:", model_save_path)
 
 os.makedirs(model_save_path, exist_ok=True)
@@ -675,7 +1066,7 @@ cql_config = d3rlpy.algos.DiscreteCQLConfig(
     alpha=0.5,                        # Reduced CQL penalty (was 1.0) Reduce alpha further: 0.5 → 0.3 (less conservative)
     gamma=0.95,                       # Lower discount to reduce Q-value propagation (was 0.99) Increase gamma: 0.95 → 0.97 (longer horizon)
     n_critics=2,                      # Number of Q-networks for conservative estimation
-    target_update_interval=10000,      # More frequent updates (was 8000)
+    target_update_interval=10000,     # More frequent updates (was 8000)
 )
 cql = cql_config.create(
     device='cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -700,7 +1091,7 @@ print(cql)
 print("\n========== CQL Model Parameters ==========")
 get_parameter_number(cql)
 print("==========================================\n")
-
+# exit(0)
 
 # ========== TRAINING MODE ========== #
 if not(args.is_eval_only):
@@ -767,12 +1158,6 @@ if not(args.is_eval_only):
     print(f"Final TD error: {final_td_error:.6f}")
     print(f"Final avg value estimation: {final_avg_value:.6f}")
     
-    
-    strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    if final_score > min_accuracy_threshold:
-        final_model_path = f"/scratch/gilbreth/yrayhan/save_models/d3rlpy_cql_models/{strftime}-{final_score:.3f}.d3"
-        cql.save_model(final_model_path)
-        print(f"Final CQL model saved: {final_model_path} (accuracy: {final_score:.1%})")
     exit(0)
 
 

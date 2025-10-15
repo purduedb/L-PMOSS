@@ -540,48 +540,49 @@ class PMOSSStateEncoder_v2(nn.Module):
         return state_embeddings
 
 
-# Setup d3rlpy Discrete BC algorithm
 class PMOSSStateEncoder_v3(nn.Module):
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
         super().__init__()
         chassis_dimx = cd[0]
         chassis_dimy = cd[1]
 
-        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (3 + num_features, 64, 64)
+        self.c, self.h, self.w = 3+num_features, chassis_dimx, chassis_dimy  # e.g. (18, 8, 12)
         self.num_features = num_features
         self.num_mfeatures = num_mfeatures
 
+        # Optimized CNN - reduced channels to hit ~1.845M params per Q-network
         self.state_encoder_s = nn.Sequential(
-            nn.Conv2d(self.c, 16, 8, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            
-            nn.Conv2d(16, 32, 4, stride=2, padding=1),
-            nn.BatchNorm2d(32),
+            # Layer 1: 18 -> 32 channels
+            nn.Conv2d(self.c, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
 
-            nn.Conv2d(32, 16, 3, stride=2, padding=1),
-            nn.BatchNorm2d(16),
+            # Layer 2: 32 -> 64 channels
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
-            
+
+            # Layer 3: 128 -> 256 channels
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+
+ 
+            # Global average pooling to get fixed size regardless of input spatial dims
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-    
-            nn.Linear(16, 32),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(32, 512),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, 1024),
+
+            # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
+            nn.Linear(256, 1024),
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(1024, 2048),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(2048, n_embd)
+            nn.Linear(2048, n_embd),
         )
 
+        # Meta encoder - balanced capacity
         self.meta_encoder_s = nn.Sequential(
             nn.Linear(self.num_mfeatures+2, 128),
             nn.ReLU(),
@@ -589,12 +590,11 @@ class PMOSSStateEncoder_v3(nn.Module):
             nn.Linear(128, 256),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(256, 512),
+            nn.Linear(256, 128),
             nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, self.num_mfeatures)
-            )
-
+            nn.Linear(128, self.num_mfeatures)
+        )
+    
     def forward(self, x):
         x1_ = x[:, :self.c*self.h*self.w]
         x2_ = x[:, self.c*self.h*self.w:]
@@ -606,13 +606,12 @@ class PMOSSStateEncoder_v3(nn.Module):
             meta_embeddings = self.meta_encoder_s(
                 x2_.reshape(-1, self.num_mfeatures+2)
                 )
-            # print(meta_embeddings.shape, state_embeddings.shape)
             state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
 
         state_embeddings = nn.Tanh()(state_embeddings)
 
         return state_embeddings
-    
+
 
 class PMOSSStateEncoder_v4(nn.Module):
     def __init__(self, input_shape, n_embd, num_features, num_mfeatures=nmf):
@@ -928,7 +927,7 @@ class PMOSSStateEncoderFactory(EncoderFactory):
             print("Using PMOSSStateEncoder (~90K params)")
             # return PMOSSStateEncoder(observation_shape, self.n_embd, self.num_features,
             #                          self.num_meta_features)
-            return PMOSSStateEncoder_v3(observation_shape, self.n_embd, self.num_features,
+            return PMOSSStateEncoder_v4(observation_shape, self.n_embd, self.num_features,
                                      self.num_meta_features)
     
     def get_type(self):

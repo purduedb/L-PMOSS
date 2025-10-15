@@ -2,12 +2,11 @@
 
 module load conda
 conda activate pmoss
-
+base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/___d3rlpy_bc_models/2025-10-14-03-15-47-0.607.d3"
 # ===========================================================================================
-initial_load="/scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/2025-10-14-23-41-25-0.715.d3"
 # For pre-training
-python run_bc.py \
-  --mpath "$initial_load" \
+python run_bc_v2.py \
+  --mpath "$base_model_wo_ibm" \
   --wl 11 \
   --ecfg 100 \
   --sidx 200 \
@@ -15,16 +14,14 @@ python run_bc.py \
   --epochs 400 \
   --n_embd 128 \
   --batch_size 256 \
-  --save_path "/scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/"
+  --save_path "/scratch/gilbreth/yrayhan/save_models/___d3rlpy_bc_models/"
 
 # # ===========================================================================================
-# For inference on base models
+# # For inference on base models
 # /scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/2025-10-11-06-46-38-0.917.d3: 1100s
-# 2025-10-13-12-41-32-0.802.d3: 1300s
-
-# base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/_d3rlpy_bc_models/2025-10-13-12-41-32-0.802.d3"
+# base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/2025-10-11-06-46-38-0.917.d3"
 # wk_list=(11 12 16 44 45)
-# sidx_list=(13000 13001 13004 13002 13003)
+# sidx_list=(11000 11001 11002 11003 11004)
 
 # for i in "${!wk_list[@]}"; do
 #   wk=${wk_list[$i]}
@@ -36,9 +33,7 @@ python run_bc.py \
 #     --ecfg 100 \
 #     --sidx "$sidx" \
 #     --is_eval_only \
-#     --rtg 2 \
-#     --n_embd 32 \
-#     --batch_size 256
+#     --rtg 2 
 # done
 
 # # ===========================================================================================
