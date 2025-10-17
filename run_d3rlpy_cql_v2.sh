@@ -3,7 +3,7 @@
 module load conda
 conda activate pmoss
 
-initial_load="/scratch/gilbreth/yrayhan/save_models/___d3rlpy_cql_models/2025-10-14-23-41-52-0.531.d3" 
+initial_load="/scratch/gilbreth/yrayhan/save_models/___d3rlpy_cql_models/2025-10-15-18-12-23-0.875.d3" 
 # For pre-training 
 python run_cql_v2.py \
   --mpath "$initial_load" \

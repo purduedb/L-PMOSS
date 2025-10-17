@@ -148,27 +148,27 @@ bc_epochs, bc_accuracies, bc_timestamps = parse_log_with_timestamps(
 
 print("[3/3] Parsing CQL baseline log...")
 cql_epochs, cql_accuracies, cql_timestamps = parse_log_with_timestamps(
-    # '/home/yrayhan/works/L-PMOSS/_log_bc_baseline.txt', 'BC'
     # '/home/yrayhan/works/L-PMOSS/log_cql_baseline.txt', 'CQL'
-    '/home/yrayhan/works/L-PMOSS/___log_cql_baseline.txt', 'CQL'
+    # '/home/yrayhan/works/L-PMOSS/__log_cql_baseline.txt', 'CQL'
+    # '/home/yrayhan/works/L-PMOSS/___log_cql_baseline.txt', 'CQL'
+    '/home/yrayhan/works/L-PMOSS/-log_cql_baseline.txt', 'CQL'
+
     )
 
 print("[2/3] Parsing DT baseline log...")
 dt_epochs, dt_accuracies, dt_timestamps = parse_log_with_timestamps(
     '/home/yrayhan/works/L-PMOSS/log_dt_baseline.txt', 'DT'
-    # '/home/yrayhan/works/L-PMOSS/log_cql_baseline.txt', 'BC'
     )
 
-cql_epochs2, cql_accuracies2, cql_timestamps2 = parse_log_with_timestamps(
-    # '/home/yrayhan/works/L-PMOSS/__log_cql_baseline.txt', 'CQL'
-    '/home/yrayhan/works/L-PMOSS/____log_cql_baseline.txt', 'CQL'
-    )
+# cql_epochs2, cql_accuracies2, cql_timestamps2 = parse_log_with_timestamps(
+#     '/home/yrayhan/works/L-PMOSS/-log_cql_baseline.txt', 'CQL'
+#     )
 
 # Convert timestamps to cumulative minutes from start
 bc_minutes = convert_timestamps_to_minutes(bc_timestamps)
 dt_minutes = convert_timestamps_to_minutes(dt_timestamps)
 cql_minutes = convert_timestamps_to_minutes(cql_timestamps)
-cql_minutes2 = convert_timestamps_to_minutes(cql_timestamps2)
+# cql_minutes2 = convert_timestamps_to_minutes(cql_timestamps2)
 
 # Print statistics
 print("\n" + "="*70)
@@ -209,9 +209,9 @@ if cql_minutes and cql_accuracies:
             linewidth=linewidth, marker='^', markersize=4, markevery=max(1, len(cql_minutes)//30), alpha=0.9)
 
 # make color orange for cql_minutes2
-if cql_minutes2 and cql_accuracies2:
-    ax.plot(cql_minutes2, cql_accuracies2, 'orange', label='CQL (v2)',
-            linewidth=linewidth, marker='o', markersize=4, markevery=max(1, len(cql_minutes2)//30), alpha=0.9)
+# if cql_minutes2 and cql_accuracies2:
+#     ax.plot(cql_minutes2, cql_accuracies2, 'orange', label='CQL (v2)',
+#             linewidth=linewidth, marker='o', markersize=4, markevery=max(1, len(cql_minutes2)//30), alpha=0.9)
 
 # Formatting
 ax.set_xlabel('Training Time (minutes)', fontsize=16)

@@ -211,12 +211,12 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    "intel_skx_4s_8n", 
-    "amd_epyc7543_2s_8n",
-    "amd_epyc7543_2s_2n", 
-    "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
-    # "ibm_power_2s_2n",
+    # "intel_skx_4s_8n", 
+    # "amd_epyc7543_2s_8n",
+    # "amd_epyc7543_2s_2n", 
+    # "intel_sb_4s_4n",
+    # "nvidia_gh_1s_1n",
+    "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
     exp_config = ExpConfig(processor=p, 
@@ -796,13 +796,10 @@ class PMOSSStateEncoderLarge_v4(nn.Module):
             nn.Flatten(),
 
             # Dense layers - tuned to hit ~1.845M params per Q-network (3.69M total)
-            nn.Linear(384, 32),
+            nn.Linear(384, 128),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(32, 1024),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(1024, 2048),
+            nn.Linear(128, 2048),
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(2048, n_embd),
@@ -881,10 +878,10 @@ class PMOSSStateEncoderLarge_v5(nn.Module):
             nn.Linear(384, 64),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(64, 2048),
+            nn.Linear(64, 4096),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(2048, n_embd),
+            nn.Linear(4096, n_embd),
         )
 
         # Meta encoder - balanced capacity
@@ -1019,7 +1016,7 @@ class PMOSSStateEncoderFactory(EncoderFactory):
             print("Using PMOSSStateEncoderLarge (~1.845M params per Q-network, 3.69M total for CQL)")
             # return PMOSSStateEncoderLarge(observation_shape, self.n_embd, self.num_features,
             #                               self.num_meta_features)
-            return PMOSSStateEncoderLarge_v2(observation_shape, self.n_embd, self.num_features,
+            return PMOSSStateEncoderLarge_v5(observation_shape, self.n_embd, self.num_features,
                                           self.num_meta_features)
         else:
             print("Using PMOSSStateEncoder (~90K params per Q-network, ~180K total for CQL)")
@@ -1169,7 +1166,7 @@ obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, time
 cql.build_with_dataset(dataset)
 
 # Print CQL model parameters
-get_parameter_number(cql.impl)
+get_parameter_number(cql)
 
 cql.load_model(model_path)
 print("CQL model loaded successfully!")
@@ -1294,6 +1291,7 @@ def evaluate_cql_policy_rollout_dt_style(cql_model, exp_config, test_dataset):
         with torch.no_grad():
             # For CQL, we use the Q-function to get Q-values for all actions
             q_values = cql_model.impl._modules.q_funcs[0](obs_tensor)  # Use first Q-function
+
             q_tensor = q_values.q_value
             mask_tensor = torch.from_numpy(np.array(obs_mask_core) == 0).float().to(q_tensor.device)
             # Apply masking: set invalid actions to very low Q-values
@@ -1305,7 +1303,7 @@ def evaluate_cql_policy_rollout_dt_style(cql_model, exp_config, test_dataset):
             pred_actions += [logits_actions]
         else:
             pred_actions += [logits_actions.item()]
-        print(pred_actions)
+        # print(pred_actions)
 
         state, current_rtg, done, meta_state, obs_mask_core = env_update(
             x, m_x, st,  

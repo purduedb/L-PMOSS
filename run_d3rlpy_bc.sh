@@ -4,42 +4,43 @@ module load conda
 conda activate pmoss
 
 # ===========================================================================================
-initial_load="/scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/2025-10-14-23-41-25-0.715.d3"
+# initial_load="/scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/2025-10-14-23-41-25-0.715.d3"
 # For pre-training
-python run_bc.py \
-  --mpath "$initial_load" \
-  --wl 11 \
-  --ecfg 100 \
-  --sidx 200 \
-  --rtg 2 \
-  --epochs 400 \
-  --n_embd 128 \
-  --batch_size 256 \
-  --save_path "/scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/"
+# python run_bc.py \
+#   --mpath "None" \
+#   --wl 11 \
+#   --ecfg 100 \
+#   --sidx 200 \
+#   --rtg 2 \
+#   --epochs 400 \
+#   --n_embd 128 \
+#   --batch_size 256 \
+#   --save_path "/scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/"
 
 # # ===========================================================================================
 # For inference on base models
 # /scratch/gilbreth/yrayhan/save_models/d3rlpy_bc_models/2025-10-11-06-46-38-0.917.d3: 1100s
 # 2025-10-13-12-41-32-0.802.d3: 1300s
+# /scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/2025-10-14-12-31-03-0.711.d3: 14000s
 
-# base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/_d3rlpy_bc_models/2025-10-13-12-41-32-0.802.d3"
-# wk_list=(11 12 16 44 45)
-# sidx_list=(13000 13001 13004 13002 13003)
+base_model_wo_ibm="/scratch/gilbreth/yrayhan/save_models/__d3rlpy_bc_models/2025-10-14-12-31-03-0.711.d3"
+wk_list=(11 12 16 44 45)
+sidx_list=(14000 14001 14004 14002 14003)
 
-# for i in "${!wk_list[@]}"; do
-#   wk=${wk_list[$i]}
-#   sidx=${sidx_list[$i]}
+for i in "${!wk_list[@]}"; do
+  wk=${wk_list[$i]}
+  sidx=${sidx_list[$i]}
 
-#   python run_bc.py \
-#     --mpath "$base_model_wo_ibm" \
-#     --wl "$wk" \
-#     --ecfg 100 \
-#     --sidx "$sidx" \
-#     --is_eval_only \
-#     --rtg 2 \
-#     --n_embd 32 \
-#     --batch_size 256
-# done
+  python run_bc.py \
+    --mpath "$base_model_wo_ibm" \
+    --wl "$wk" \
+    --ecfg 100 \
+    --sidx "$sidx" \
+    --is_eval_only \
+    --rtg 2 \
+    --n_embd 128 \
+    --batch_size 256
+done
 
 # # ===========================================================================================
 # # For fine-tuning the model
