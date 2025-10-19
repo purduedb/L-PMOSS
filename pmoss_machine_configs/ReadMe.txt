@@ -5,3 +5,4 @@
 12000s: d3rlpy _bc
 3000s: Unseen workloads with BatchNorm
 14000: d3rlpy_bc
+15000: d3rlpy_cql

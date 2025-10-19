@@ -65,6 +65,7 @@ parser.add_argument('--n_head', type=int, default=8, help='Number of attention h
 
 parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
+parser.add_argument('--save_model_path', type=str, default=None, help='Custom path to save models (overrides default paths)')
 
 # changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
@@ -159,12 +160,12 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    "intel_skx_4s_8n", 
+    # "intel_skx_4s_8n", 
     # "amd_epyc7543_2s_8n",
-    "amd_epyc7543_2s_2n", 
-    "intel_sb_4s_4n",
-    "nvidia_gh_1s_1n",
-    # "ibm_power_2s_2n",
+    # "amd_epyc7543_2s_2n", 
+    # "intel_sb_4s_4n",
+    # "nvidia_gh_1s_1n",
+    "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
     exp_config = ExpConfig(processor=p, 
@@ -313,12 +314,18 @@ model = GPT(mconf, exp_config)
 
 if model_path is not None:
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
-    for k,v in state_dict.items():
-        if "module." in k:
-            state_dict[k.split('.', 1)[1]] = v
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        # Remove _orig_mod. prefix from torch.compile()
+        if k.startswith("_orig_mod."):
+            new_key = k.replace("_orig_mod.", "")
+        # Remove module. prefix from DataParallel
+        elif k.startswith("module."):
+            new_key = k.replace("module.", "")
         else:
-            state_dict[k] = v
-    model.load_state_dict(state_dict, strict = True)
+            new_key = k
+        new_state_dict[new_key] = v
+    model.load_state_dict(new_state_dict, strict = True)
 model.eval()
 
 # Compile model for faster inference (PyTorch 2.0+)
@@ -342,7 +349,7 @@ tconf = TrainerConfig(
     lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(train_dataset)*args.context_length*3,
     num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps),
     draw_placement = True, is_eval_only = args.is_eval_only,
-    test_all_macro = args.test_all_macro)
+    test_all_macro = args.test_all_macro, save_model_path=args.save_model_path)
 print("trainerconfig finish")
 
 # => my test_dataset in place of None

@@ -154,29 +154,33 @@ class Trainer:
 					model.eval()
 					raw_model = self.model.module if hasattr(self.model, "module") else self.model
 
-					# For saving assistant models
-					# save_models_dir = "/scratch/gilbreth/yrayhan/save_models/" + self.exp_config.processor + "/" + str(self.exp_config.index)
-
-					# For saving base models
-					model_type = getattr(self.model, 'model_type', None)
-					if model_type is None and hasattr(self.model, 'module'):
-						model_type = getattr(self.model.module, 'model_type', None)
-					
-					if model_type == 'reward_conditioned':
-						if self.exp_config.generalization_study:
-							save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/base_models/{self.exp_config.exclude_machine}/{self.exp_config.index}"
-						elif self.exp_config.ablation_study:
-							if self.exp_config.ablation_param == 'num_layer':
-								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nl_{self.exp_config.n_layer}/{self.exp_config.index}"
-							elif self.exp_config.ablation_param == 'num_head':
-								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nh_{self.exp_config.n_head}/{self.exp_config.index}"
-							elif self.exp_config.ablation_param == 'num_embedding':
-								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/ne_{self.exp_config.n_embd}/{self.exp_config.index}"
-						else:
-							# save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
-							save_models_dir = "/scratch/gilbreth/yrayhan/save_models/log_base_models/" + str(self.exp_config.index)
+					# Check if custom save path is provided
+					if hasattr(self.config, 'save_model_path') and self.config.save_model_path is not None:
+						save_models_dir = self.config.save_model_path
 					else:
-						save_models_dir = "/scratch/gilbreth/yrayhan/save_models/bc_models/" + str(self.exp_config.index)
+						# For saving assistant models
+						# save_models_dir = "/scratch/gilbreth/yrayhan/save_models/" + self.exp_config.processor + "/" + str(self.exp_config.index)
+
+						# For saving base models
+						model_type = getattr(self.model, 'model_type', None)
+						if model_type is None and hasattr(self.model, 'module'):
+							model_type = getattr(self.model.module, 'model_type', None)
+
+						if model_type == 'reward_conditioned':
+							if self.exp_config.generalization_study:
+								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/base_models/{self.exp_config.exclude_machine}/{self.exp_config.index}"
+							elif self.exp_config.ablation_study:
+								if self.exp_config.ablation_param == 'num_layer':
+									save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nl_{self.exp_config.n_layer}/{self.exp_config.index}"
+								elif self.exp_config.ablation_param == 'num_head':
+									save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/nh_{self.exp_config.n_head}/{self.exp_config.index}"
+								elif self.exp_config.ablation_param == 'num_embedding':
+									save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/ne_{self.exp_config.n_embd}/{self.exp_config.index}"
+							else:
+								# save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
+								save_models_dir = "/scratch/gilbreth/yrayhan/save_models/log_base_models/" + str(self.exp_config.index)
+						else:
+							save_models_dir = "/scratch/gilbreth/yrayhan/save_models/bc_models/" + str(self.exp_config.index)
 
 					os.makedirs(save_models_dir, exist_ok=True)
 					torch.save(raw_model.state_dict(), save_models_dir+"/{}-{:.3f}.pkl".format(strftime, accs.mean()))

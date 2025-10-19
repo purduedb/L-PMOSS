@@ -122,20 +122,6 @@ class GPT(nn.Module):
 
         self.config = config
         self.model_type = config.model_type  # str: "reward_conditioned"
-
-        # input embedding stem
-        print("config.vocab_size", config.vocab_size)  
-        
-        self.tok_emb = nn.Embedding(config.vocab_size, config.n_embd)  # (grid^2, Your choice = 128) 
-        # Your dictionary has [vocab_size] words and each word is of size [n_embd]
-        # A simple lookup table
-
-        #  255*3(rtg, state, action) + 1 
-        # => my (1, 3*256 +1, 128)
-        self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size + 1, config.n_embd)) # 255*3  
-        #  255 + 1(circuit emb)
-        # => my (1, 256 +1, 128)
-        self.global_pos_emb = nn.Parameter(torch.zeros(1, config.block_size // 3 + 1, config.n_embd))  # => my (1, 256 +1, 128)
         
         self.drop = nn.Dropout(config.embd_pdrop)
 
@@ -158,75 +144,41 @@ class GPT(nn.Module):
         
         
         if not(exp_config.num_meta_features) == 0:
-            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), 
-                                                 nn.BatchNorm2d(16),
-                                                 nn.ReLU(), # 
-                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.BatchNorm2d(32),
-                                    nn.ReLU(), 
-                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.BatchNorm2d(16),
-                                    nn.ReLU(), # 14*14*16
-                                    nn.AdaptiveAvgPool2d((1, 1)),
-                                    nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
+            self.state_encoder_s = nn.Sequential(
+                nn.Conv2d(3+self.num_features, 48, kernel_size=3, stride=1, padding=1),nn.BatchNorm2d(48),nn.ReLU(),
+                nn.Conv2d(48, 96, kernel_size=3, stride=1, padding=1),nn.BatchNorm2d(96),nn.ReLU(),
+                nn.Conv2d(96, 192, kernel_size=3, stride=1, padding=1),nn.BatchNorm2d(192),nn.ReLU(),
+                nn.Conv2d(192, 384, kernel_size=3, stride=1, padding=1),nn.BatchNorm2d(384),nn.ReLU(),
+                nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(),
+                nn.Linear(384, 768),nn.ReLU(),nn.Dropout(0.1),
+                nn.Linear(768, 512),nn.ReLU(),nn.Dropout(0.1),
+                nn.Linear(512, config.n_embd-self.num_mfeatures),
+                )  # Added -16 to incorporate meta data
+            
         else:
-            self.state_encoder_s = nn.Sequential(nn.Conv2d(3+self.num_features, 16, 8, stride=2, padding=1), 
-                                                 nn.BatchNorm2d(16),
-                                                 nn.ReLU(), # 
-                                    nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.BatchNorm2d(32),
-                                    nn.ReLU(), 
-                                    nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.BatchNorm2d(16),
-                                    nn.ReLU(), # 14*14*16
-                                    nn.AdaptiveAvgPool2d((1, 1)),
-                                    nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
+            assert False
         
-        self.meta_encoder_s = nn.Sequential(nn.Linear(self.num_mfeatures+2, 32), nn.ReLU(), nn.Linear(32, self.num_mfeatures))
+        self.meta_encoder_s = nn.Sequential(
+            nn.Linear(self.num_mfeatures+2, 32), nn.ReLU(), nn.Dropout(0.1),
+            nn.Linear(32, 64), nn.ReLU(), nn.Dropout(0.1),
+            nn.Linear(64, self.num_mfeatures)
+            )
         
 
-        self.action_head = nn.Sequential(nn.Conv2d(3, 3+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-                                 nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
-                                 nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-                                 nn.Flatten())
-        self.action_head_s = nn.Sequential(nn.Conv2d(1, 3+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-                                 nn.Conv2d(3+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
-                                 nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-                                 nn.Flatten())
-        
-        # if not(exp_config.num_meta_features) == 0:
-        #     self.state_encoder_s = nn.Sequential(nn.Conv2d(5+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-        #                                 nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-        #                                 nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-        #                                 nn.Flatten(), nn.Linear(16, config.n_embd-self.num_mfeatures))  # Added -16 to incorporate meta data
-        # else:
-        #     self.state_encoder_s = nn.Sequential(nn.Conv2d(5+self.num_features, 16, 8, stride=2, padding=1), nn.ReLU(), # 
-        #                                 nn.Conv2d(16, 32, 4, stride=2, padding=1), nn.ReLU(), 
-        #                                 nn.Conv2d(32, 16, 3, stride=2, padding=1), nn.ReLU(), # 14*14*16
-        #                                 nn.Flatten(), nn.Linear(16, config.n_embd))  # Added -16 to incorporate meta data
-        
-        # self.meta_encoder_s = nn.Sequential(nn.Linear(self.num_mfeatures, 32), nn.ReLU(), nn.Linear(32, self.num_mfeatures))
-        
-
-        # self.action_head = nn.Sequential(nn.Conv2d(3, 5+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-        #                          nn.Conv2d(5+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
-        #                          nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-        #                          nn.Flatten())
-        # self.action_head_s = nn.Sequential(nn.Conv2d(1, 5+self.num_features, 1, stride=1, padding=0), nn.ReLU(), # 
-        #                          nn.Conv2d(5+self.num_features, 8, 1, stride=1, padding=0), nn.ReLU(), 
-        #                          nn.Conv2d(8, 1, 1, stride=1, padding=0), # 14*14*8
-        #                          nn.Flatten())
+        self.action_head_s = nn.Sequential(
+            nn.Conv2d(1, 3+self.num_features, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(3+self.num_features), nn.ReLU(),
+            nn.Conv2d(3+self.num_features, 96, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(96), nn.ReLU(),
+            nn.Conv2d(96, 48, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(48), nn.ReLU(),
+            nn.Conv2d(48, 16, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(16), nn.ReLU(),
+            nn.Conv2d(16, 1, kernel_size=1, stride=1, padding=0),
+            nn.Flatten()
+        )
 
         self.one_kernel = nn.Sequential(nn.Conv2d(2, 1, 1, stride=1, padding=0), nn.Flatten())
 
         self.ret_emb = nn.Sequential(nn.Linear(1, config.n_embd), nn.Tanh())
         
-        self.circuit_emb = nn.Embedding(10, config.n_embd-2)
 
-        self.circuit_emb_tmp = nn.Embedding(20, config.n_embd)
-
-        self.circuit_emb_s = nn.Linear(2, config.n_embd)
-
-        self.circuit_emb_ss = nn.Sequential(nn.Linear(256*3, 1024), nn.ReLU(), 
-                                nn.Linear(1024, 1024), nn.ReLU(),
-                                nn.Linear(1024, config.n_embd))
-        
         self.action_embeddings_s = nn.Embedding(self.chassis_dimx*self.chassis_dimy, config.n_embd)
         
         self.exp_config = exp_config
@@ -275,8 +227,8 @@ class GPT(nn.Module):
                     no_decay.add(fpn)
 
         # special case the position embedding parameter in the root GPT module as not decayed
-        no_decay.add('pos_emb')
-        no_decay.add('global_pos_emb')
+        # no_decay.add('pos_emb')
+        # no_decay.add('global_pos_emb')
 
         # validate that we considered every parameter
         param_dict = {pn: p for pn, p in self.named_parameters()}
@@ -298,91 +250,29 @@ class GPT(nn.Module):
     def forward(self, states, actions, targets=None, rtgs=None, 
         timesteps=None, meta_states = None, benchmarks= None, stepwise_returns= None,
         circuit_feas=None, lengths = None, is_random_shuffle =False):
-        # states: (batch, context-length, 4*84*84)
-        # actions: (batch, context, 1)
-        # targets: (batch, context, 1)
-        # rtgs: (batch, context, 1)
-        # timesteps: (batch, context, 1)
-        # meta states: (B, context, 6)
-        # benchmarks: (B, context, 1, 1)
-        # stepwise-returns: (B, context, 1, 1)
-        # circuit_feas: (batch, 2)  => my (batch, context*3)
-        # lengths: (batch, context)
-        # print(states[0])
-        # print(actions[0].view(-1, ))
-        # print(rtgs[0].view(-1, ))
-        # tt = input()
-        # print(timesteps[0].view(-1, ))
-        # print(meta_states[0].view(-1, ))
-        # print(stepwise_returns[0].view(-1, ))
         
         if actions is not None and len(actions.shape) == 2:
             actions = actions.unsqueeze(-1)
         
-        # if meta_states is None:
-        #     assert False
-        # else:
-        circuit_embeddings = circuit_feas
-        
-        state_embeddings = self.state_encoder_s(
-            states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
-            )
-        # state_embeddings = self.state_encoder_s(
-        #     states.reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous()
-        #     )
+        state_embeddings = self.state_encoder_s(states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy).type(torch.float32).contiguous())
         if not(self.exp_config.num_meta_features == 0):        
-            meta_embeddings = self.meta_encoder_s(
-                meta_states[:, :].reshape(-1, self.num_mfeatures+2)
-                )
-            # print(meta_embeddings.shape, state_embeddings.shape)
+            meta_embeddings = self.meta_encoder_s(meta_states[:, :].reshape(-1, self.num_mfeatures+2))
             state_embeddings = torch.cat((state_embeddings, meta_embeddings[:, :].reshape(-1, self.num_mfeatures)), dim = 1)
-        
         state_embeddings = nn.Tanh()(state_embeddings)
             
-
         # batch / sequence / n_embd
         state_embeddings = state_embeddings.reshape(states.shape[0], states.shape[1], self.config.n_embd) # (batch, context, n_embd)
         
-        # This ultimately does not pass through
-        circuit_embeddings = circuit_embeddings.reshape(-1, 256*3)  # (batch, 3*context => probably matching the states)
-        circuit_embeddings = self.circuit_emb_ss(circuit_embeddings)  # (batch, nn_embedding)
         
-        # ------------------------------------------------------------------------------------- 
-        # This can be used to code hardware chassis specific infomation such as a gnn
-        no_circuit_emb = True
-        if no_circuit_emb:
-            circuit_embeddings = torch.zeros_like(circuit_embeddings)
-        if is_random_shuffle:
-            circuit_embeddings = torch.zeros_like(circuit_embeddings)
-        # ------------------------------------------------------------------------------------- 
-        
-
         if actions is not None and self.model_type == 'reward_conditioned': 
             rtg_embeddings = self.ret_emb(rtgs.type(torch.float32))  # (batch, context, n_Embedding)
             rtg_embeddings = rtg_embeddings.reshape(states.shape[0], -1, self.config.n_embd)  # (batch, context, n_Embedding)
-            
-            
-            action_embeddings = self.action_embeddings_s(actions.type(torch.long).squeeze(-1))  # (batch, context, n_Embedding)
-            
-            
-            # -------------------------------------------------------------------------------------
-            # Include circuit embedding
-            # (b, 3*context+1, n_Embd)
-            # token_embeddings = torch.zeros((states.shape[0], 1+states.shape[1]*3 - int(targets is None), self.config.n_embd), dtype=torch.float32, device=state_embeddings.device)
-            # # A single batch looks like this [circuit][rtg_0][s_0][a_0][rtg_1][s_1][a_1]
-            # token_embeddings[:,0,:] = circuit_embeddings.squeeze()   # (bs, 0, n_Embedding)
-            # token_embeddings[:,1::3,:] = rtg_embeddings   
-            # token_embeddings[:,2::3,:] = state_embeddings
-            # token_embeddings[:,3::3,:] = action_embeddings[:,-states.shape[1] + int(targets is None):,:]
-            
+            action_embeddings = self.action_embeddings_s(actions.type(torch.long).squeeze(-1))  # (batch, context, n_Embedding)    
 
-
-            # If you do not have any circuit embeddings then you can use this
             token_embeddings = torch.zeros((states.shape[0], states.shape[1]*3 - int(targets is None), self.config.n_embd), dtype=torch.float32, device=state_embeddings.device)
             token_embeddings[:,0::3,:] = rtg_embeddings   
             token_embeddings[:,1::3,:] = state_embeddings
             token_embeddings[:,2::3,:] = action_embeddings[:,-states.shape[1] + int(targets is None):,:]
-            
             
         elif actions is None and self.model_type == 'reward_conditioned': # only happens at very first timestep of evaluation
             print("------------------------------------------------------------------------------------- TIME-STEP T0")
@@ -395,19 +285,14 @@ class GPT(nn.Module):
             token_embeddings[:,0::2,:] = rtg_embeddings # really just [:,0,:]
             token_embeddings[:,1::2,:] = state_embeddings # really just [:,1,:]
         
-        elif actions is not None and self.model_type == 'naive':
-            # assert False
-            # action_embeddings = self.action_embeddings(actions.type(torch.long).squeeze(-1)) # (batch, block_size, n_embd)
+        elif actions is not None and self.model_type == 'naive':            
             action_embeddings = self.action_embeddings_s(actions.type(torch.long).squeeze(-1))  # (batch, context, n_Embedding)
-
-            # token_embeddings = torch.zeros((states.shape[0], states.shape[1]*2 - int(targets is None), self.config.n_embd), dtype=torch.float32, device=state_embeddings.device)
             token_embeddings = torch.zeros((states.shape[0], states.shape[1]*2 - int(targets is None), self.config.n_embd), dtype=torch.float32, device=state_embeddings.device)
             
             token_embeddings[:,::2,:] = state_embeddings
             token_embeddings[:,1::2,:] = action_embeddings[:,-states.shape[1] + int(targets is None):,:]
             
         elif actions is None and self.model_type == 'naive': # only happens at very first timestep of evaluation
-            # assert False
             token_embeddings = state_embeddings
         else:
             raise NotImplementedError()
@@ -419,18 +304,14 @@ class GPT(nn.Module):
         logits = self.head(x) # (batch, 1 + 3*context, vocab_size)
         
         if actions is not None and self.model_type == 'reward_conditioned':
-            # => my changed it to 1::3 from 2::3
             logits = logits[:, 1::3, :] # only keep predictions from state_embeddings #(batch, seq, emb)
             # (batch, context_length, vocab_size)
         elif actions is None and self.model_type == 'reward_conditioned':
             print("------------------------------------------------------------------------------------- TIME-STEP T0")
             logits = logits[:, 1:, :]
-            
         elif actions is not None and self.model_type == 'naive':
-            # print("ENTERED HERE ASSERTION ERROR!-------------------------------------------------------------------------------------")
             logits = logits[:, ::2, :] # only keep predictions from state_embeddings
         elif actions is None and self.model_type == 'naive':
-            # print("ENTERED HERE ASSERTION ERROR!-------------------------------------------------------------------------------------")
             logits = logits # for completeness
         else:
             raise NotImplementedError()
@@ -438,43 +319,27 @@ class GPT(nn.Module):
         
         # Passing only the obss through the action_head_s        
         action_h = self.action_head_s(states[:, :, :].reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 1, :, :].reshape(-1, 1, self.chassis_dimx, self.chassis_dimy))    
-        # action_h = self.action_head_s(states[:, :, :].reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 1, :, :].reshape(-1, 1, self.chassis_dimx, self.chassis_dimy))    
         action_h = action_h.reshape(states.shape[0] * states.shape[1], 1, self.chassis_dimx, self.chassis_dimy)
-        
         logits_action_h = torch.cat((logits.reshape(states.shape[0] * states.shape[1], 1, self.chassis_dimx, self.chassis_dimy), action_h), dim=1)
         
         logits = self.one_kernel(logits_action_h) # (batch*context, grid*grid = vocab_length)
         logits = logits.reshape(states.shape[0], states.shape[1], -1)
         
-        
-        # TODO: Double check if the mask indexing is correct or not!
         mask = states.reshape(-1, 3+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 3+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
-        # mask = states.reshape(-1, 5+self.num_features, self.chassis_dimx, self.chassis_dimy)[:, 5+self.num_features-1].reshape(states.shape[0], states.shape[1], self.chassis_dimx * self.chassis_dimy)  # The 3rd one obss_mask is used here raw
-
-        # print(mask[-1,-1])
-        # print(logits[-1,-1])
         logits = logits - 1.0e8 * mask        
-        # print(logits[-1,-1])
-        # zz = input()
         
-        # if we are given some desired targets also calculate the loss
         loss = None
         
         if targets is not None:
             lengths = lengths.reshape(states.shape[0], states.shape[1] , 1)  # (batch, context, 1)
             targets_tmp = torch.where(lengths == 1, targets, -1)  # (batch, context, 1)
             loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets_tmp.reshape(-1), ignore_index = -1)
-            # print(logits.reshape(-1, logits.size(-1)), targets_tmp.reshape(-1))
-            # zz = input()
+            
             _, res = torch.max(logits.reshape(-1, logits.size(-1)), dim=1)
-            # my=>
-            # tem = res.view(-1, 100)
-            # print(tem)
-            # print(res[-100:])
             
             real_test_num = lengths.sum()
             acc = ((res == targets_tmp.reshape(-1)).float().sum()) / real_test_num 
-            if random.random()<=0.001:
+            if random.random() <= 0.001:
                 print("testing returns...")
                 test_res = res.reshape(-1, targets.shape[1])[0].cpu()
                 print("test_res", test_res)
@@ -482,9 +347,6 @@ class GPT(nn.Module):
                 test_targets = targets.squeeze()[0]
                 print("test_targets", test_targets)
                 print("test_targets shape", test_targets.shape)
-                # benchmark = benchmark_id_to_name[benchmarks[0, 0].item()]
-                # print("benchmarks", benchmarks[0].squeeze())
-                # test_returns(test_res.numpy(), test_targets.cpu().numpy(), benchmark = benchmark)
         else:
             acc = None
 

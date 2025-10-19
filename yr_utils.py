@@ -2018,8 +2018,10 @@ def env_update(
 		numa_machine_obs[int(a)] = True
 		"""If you want the view mask to be a counter rather than a binary matrix"""
 		# numa_machine_obs[int(a)] += 1
+		
+		# no bound: Update do not bound anything
 		"""If you want the position mask to be a counter rather than a binary matrix"""
-		obs_mask_core[int(a)] -= 1
+		# obs_mask_core[int(a)] -= 1
 
 		if not(exp_config.num_meta_features == 0):
 				o1, o2, o3 = get_state_up(actions[-1], len(actions)-1, exp_config)
