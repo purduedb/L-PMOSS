@@ -11,6 +11,10 @@ from mingpt.trainer_placement import Trainer, TrainerConfig
 from yr_utils import gen_token, gen_token_for_eval, gen_token_for_all, gen_token_for_eval_for_all, collect_stats_about_offline_dataset
 from torch.utils.data.dataloader import DataLoader
 from pmoss_configs import *
+import time
+
+# Get the current time
+start_time = time.time()
 
 def get_parameter_number(model):
     total_num = sum(p.numel() for p in model.parameters())
@@ -151,6 +155,7 @@ cfg_to_start_with = args.ecfg
 db_index = args.dbidx
 db_index_kb_folder = args.idxkb
 
+db_index_kb_folder = "kb_b_dynam"
 
 # args.is_eval_only = True
 # model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
@@ -160,12 +165,12 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    # "intel_skx_4s_8n", 
+    "intel_skx_4s_8n", 
     # "amd_epyc7543_2s_8n",
     # "amd_epyc7543_2s_2n", 
     # "intel_sb_4s_4n",
     # "nvidia_gh_1s_1n",
-    "ibm_power_2s_2n",
+    # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
     exp_config = ExpConfig(processor=p, 
@@ -175,7 +180,7 @@ for p in [
                         num_features=nf, 
                         num_meta_features=nmf, 
                         cnt_grid_cells=256, 
-                        cfg_par=4, 
+                        cfg_par=5, #===============================>
                         per_cfg_sample=7, # 5
                         policy_dim = (16, 16), 
                         rtg_scale=rtg_scale,
@@ -196,8 +201,8 @@ for p in [
 # collect_stats_about_offline_dataset(glb_exp_config)
 
 
-obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
-    = gen_token_for_all(glb_exp_config)
+# obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
+#     = gen_token_for_all(glb_exp_config)
 
 # obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
 #     = gen_token(exp_config)
@@ -229,28 +234,28 @@ obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, time
 # obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
 #     = gen_token_for_eval(exp_config)
 
-print("============================================================================================================")
-print("create dataset finish.")
-print("obss shape = ", obss.shape)  # (records, 1, grid, grid) => False, true
-print("obss_wire shape = ", obss_s.shape)  # (records, 1, grid, grid)  => float
-print("obss_mask shape = ", obss_mask.shape)  # (records, 1, grid, grid)  => True, false
+# print("============================================================================================================")
+# print("create dataset finish.")
+# print("obss shape = ", obss.shape)  # (records, 1, grid, grid) => False, true
+# print("obss_wire shape = ", obss_s.shape)  # (records, 1, grid, grid)  => float
+# print("obss_mask shape = ", obss_mask.shape)  # (records, 1, grid, grid)  => True, false
 
-print("actions shape = ", actions.shape)  # (records, ) => int
-# print("returns shape = ", returns.shape)  # (101, 1) => float
-print("done_idxs shape = ", done_idxs.shape)  # (100, ) => 256 * i => 256, 512, 768
-print("rtgs shape = ", rtgs.shape)  # (records, )  => float
+# print("actions shape = ", actions.shape)  # (records, ) => int
+# # print("returns shape = ", returns.shape)  # (101, 1) => float
+# print("done_idxs shape = ", done_idxs.shape)  # (100, ) => 256 * i => 256, 512, 768
+# print("rtgs shape = ", rtgs.shape)  # (records, )  => float
 
-print("timesteps shape = ", timesteps.shape)  # (records, )  => [0-255][0-255][0-255]
-if not(exp_config.num_meta_features) == 0:
-    print("meta_data shape = ", meta_data.shape)  # (records, 6)  => negative values
+# print("timesteps shape = ", timesteps.shape)  # (records, )  => [0-255][0-255][0-255]
+# if not(exp_config.num_meta_features) == 0:
+#     print("meta_data shape = ", meta_data.shape)  # (records, 6)  => negative values
 
-print("benchmarks shape = ", benchmarks.shape)  # (records, 1)  => all 0s`
-print("stepwise_returns shape = ", stepwise_returns.shape)  # (records, 1)  => float
-print("lengths shape = ", lengths.shape)  # (records, 1) => 63s and 0s
-print("============================================================================================================")
+# print("benchmarks shape = ", benchmarks.shape)  # (records, 1)  => all 0s`
+# print("stepwise_returns shape = ", stepwise_returns.shape)  # (records, 1)  => float
+# print("lengths shape = ", lengths.shape)  # (records, 1) => 63s and 0s
+# print("============================================================================================================")
 
 
-print("create dataset finish.")
+# print("create dataset finish.")
 
 
 # set up logging
@@ -262,12 +267,12 @@ logging.basicConfig(
 
 # my=>
 context_length = exp_config.cnt_grid_cells
-train_dataset = StateActionReturnDataset(
-    exp_config,
-    obss, context_length*3, actions, 
-    done_idxs, rtgs, timesteps, meta_data, obss_s, 
-    obss_mask, benchmarks, stepwise_returns, lengths
-    )
+# train_dataset = StateActionReturnDataset(
+#     exp_config,
+#     obss, context_length*3, actions, 
+#     done_idxs, rtgs, timesteps, meta_data, obss_s, 
+#     obss_mask, benchmarks, stepwise_returns, lengths
+#     )
 test_dataset = StateActionReturnDataset(
     exp_config,
     obss_, context_length*3, actions_, 
@@ -276,7 +281,7 @@ test_dataset = StateActionReturnDataset(
     )
 
 # To check if loading is done correctly
-# loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
+# loader = DataLoader(test_dataset, shuffle=True, pin_memory=True,
 #                                 batch_size=32)
 # pbar = enumerate(loader)
 # for it, (x, y, r, t, m_x, b, st, cir, l) in pbar:
@@ -302,10 +307,14 @@ test_dataset = StateActionReturnDataset(
 
 # Model tuning 
 model_type = args.model_type
+# mconf = GPTConfig(
+#     train_dataset.vocab_size, train_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
+#     model_type=model_type, max_timestep=max(timesteps)
+#     )
 mconf = GPTConfig(
-    train_dataset.vocab_size, train_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
-    model_type=model_type, max_timestep=max(timesteps))
-
+    test_dataset.vocab_size, test_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
+    model_type=model_type, max_timestep=max(timesteps_)
+    )
 model = GPT(mconf, exp_config)
 # model_path = None
 # model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2025-07-09-23-44-40-0.556.pkl"
@@ -344,15 +353,26 @@ epochs = args.epochs
 
 
     
+# tconf = TrainerConfig(
+#     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
+#     lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(train_dataset)*args.context_length*3,
+#     num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps),
+#     draw_placement = True, is_eval_only = args.is_eval_only,
+#     test_all_macro = args.test_all_macro, save_model_path=args.save_model_path)
 tconf = TrainerConfig(
     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
-    lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(train_dataset)*args.context_length*3,
-    num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps),
+    lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(test_dataset)*args.context_length*3,
+    num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps_),
     draw_placement = True, is_eval_only = args.is_eval_only,
     test_all_macro = args.test_all_macro, save_model_path=args.save_model_path)
 print("trainerconfig finish")
 
 # => my test_dataset in place of None
-trainer = Trainer(model, train_dataset, test_dataset, tconf, cfg_to_start_with, exp_config)
+# trainer = Trainer(model, train_dataset, test_dataset, tconf, cfg_to_start_with, exp_config)
+trainer = Trainer(model, None, test_dataset, tconf, cfg_to_start_with, exp_config)
 print("trainer build finish")
 trainer.train()
+
+end_time = time.time()
+total_time = end_time - start_time
+print(f"Total training time: {total_time:.2f} seconds")

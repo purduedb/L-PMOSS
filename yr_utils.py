@@ -13,34 +13,6 @@ from collections import Counter
 # Global cache for loaded data to avoid repeated file I/O during inference
 _data_cache = {}
 
-def load_edge_index(cGridCell):
-		if machine == 0:
-				sample_array = np.loadtxt("/home/yrayhan/works/lpmoss/kb_b/" + str(CPUID[0]) + "/query_view.txt")
-		else:
-				sample_array = np.loadtxt("/home/yrayhan/works/lpmoss/kb_icelake_quad/" + str(CPUID[0]) + "/query_view.txt")
-		edge_indexes = [[] for _ in range(sample_array.shape[0])]
-		edge_indexes_w = [[] for _ in range(sample_array.shape[0])]
-
-		for _ in CPUID:
-				if machine == 0:
-						RAW_FILE = "/home/yrayhan/works/lpmoss/kb_b/" + str(_) + "/query_view.txt"
-				else:
-						RAW_FILE = "/home/yrayhan/works/lpmoss/kb_icelake_quad/" + str(_) + "/query_view.txt"
-				raw_array = np.loadtxt(RAW_FILE)
-				idx_array = raw_array[:, 0:2]
-				qCorr_array = np.reshape(raw_array[:, 2:], (raw_array.shape[0], cGridCell, cGridCell))
-
-				for _ in range(qCorr_array.shape[0]):
-						qCorr_ts = qCorr_array[_]  # ts
-						for row in range(cGridCell):
-								indexes = np.where(qCorr_ts[row] > 0)
-								for n in indexes[0]:
-										edge_indexes[_].append([row, n])
-										edge_indexes_w[_].append(qCorr_ts[row, n])
-
-		return edge_indexes, edge_indexes_w
-
-
 
 def load_hardware_snapshot(exp_config):
 		# Check cache first
@@ -53,6 +25,12 @@ def load_hardware_snapshot(exp_config):
 
 		GRID_FEATURES = np.zeros((sample_array.shape[0], exp_config.cnt_grid_cells, exp_config.num_features))
 		GRID_QUERIES = np.zeros((sample_array.shape[0], exp_config.cnt_grid_cells))
+
+		# Add code here to match the keys of each sample first, for example we are having
+		# ValueError: operands could not be broadcast together with shapes (1291,256,15) (1290,256,15)
+		# 
+		# To fix this, we need to ensure that the shapes match before performing any operations.
+		
 
 		for _ in exp_config.machine.li_ncore_dumper:
 				RAW_FILE = exp_config.kb_path+str(_) + "/data_view.txt"
@@ -68,7 +46,7 @@ def load_hardware_snapshot(exp_config):
 				else:
 					feature_array = feature_array[:, :, :exp_config.num_features]
 					feature_array = np.nan_to_num(feature_array, neginf=0, nan=0, posinf=9999999999)
-				
+
 				if "ibm" in exp_config.processor:
 					insert_idxs = [0, 1, 4, 6, 8, 11, 12, 13, 14]
 					assert feature_array.shape[2] == len(insert_idxs)
@@ -397,6 +375,7 @@ def load_qtput_per_kscell(exp_config):
 		query_throughput_shadow = np.zeros_like(query_throughput)
 		query_throughput_shadow[1:, :] = query_throughput[:query_throughput.shape[0]-1, :]
 		
+		# Since the grp len is not same for all workloads, we need to adjust this
 		for _ in range(0, query_throughput_shadow.shape[0]):  
 				query_throughput_shadow[_] = query_throughput_shadow[0]
 				_ = _ + grp_len
@@ -910,6 +889,7 @@ def gen_token_for_eval_for_all(glb_exp_config):
 		idx_array, grid_features = load_hardware_snapshot(exp_config)
 		cfg_q, query_throughput = load_qtput_per_kscell(exp_config)  # (tr, cGridCell)
 		cfg_q2, query_throughput_numa = load_qtput_cum(exp_config)  # (tr, )
+		
 		if not(exp_config.num_meta_features == 0):
 			if('intel' in exp_config.processor):
 				cfg_q3, read_channels_throughput_ts, write_channels_throughput_ts, upi_incoming_throughput_ts, upi_outgoing_throughput_ts = load_uncore_features_intel(exp_config)
@@ -1008,7 +988,7 @@ def gen_token_for_eval_for_all(glb_exp_config):
 				
 				if cfg_!= exp_config.eval_start_cfg and wl_ != exp_config.workload:
 						continue
-				
+				print(_, cfg_, wl_)
 				# Load the actions (how many for each complete row? = no of grid cells)
 				act_ = load_actions(exp_config, cfg_, wl_)
 				actions.append(act_)
