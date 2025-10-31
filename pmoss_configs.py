@@ -54,7 +54,7 @@ class ExpConfig:
 
         self.machine = Machine(self.processor)
         vendor, cpu = self.processor.split('_', 1)
-        current_folder = "/scratch/gilbreth/xxxxxxxxxx"
+        current_folder = "/scratch/xxxxxx/xxxxxxxxxx"
         # The actual offline dataset resides here 
         # self.kb_path = os.path.join(current_folder + "/kbs_train/" + 
         #                                        vendor + "/" + cpu + "/" + 

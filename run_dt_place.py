@@ -52,7 +52,7 @@ parser.add_argument('--wl', type=int, default=11)
 parser.add_argument('--ecfg', type=int, default=30)
 parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
-parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/xxxxxxxxxx/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
+parser.add_argument('--mpath', type=str, default="/scratch/xxxxxx/xxxxxxxxxx/save_models/amd_epyc7543_2s_8n/0/2024-10-23-07-27-55-0.949.pkl")
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b__")
 
@@ -132,35 +132,6 @@ class StateActionReturnDataset(Dataset):
         return states, actions, rtgs, timesteps, meta_states, \
             benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
 
-# p=args.p
-# cd=(1,1)
-# nf=-1
-# nmf=0
-# if p == "intel_skx_4s_8n":
-#     cd = (8,12)
-#     nf=15
-#     nmf=24  # 16 + 8 
-# elif p == "amd_epyc7543_2s_8n":
-#     cd = (8,8)
-#     nf=12
-#     nmf=0
-# elif p == "nvidia_gh_1s_1n":
-#     cd = (8,9)
-#     nf=12
-#     nmf=0
-# elif p == "amd_epyc7543_2s_2n":
-#     cd = (8,8)
-#     nf=12
-#     nmf=0
-#     # "Needs to be updated"
-# elif p == "intel_sb_4s_4n":
-#     cd = (8,8)
-#     nf=15
-#     nmf=16
-# elif p == "all":
-#     cd = (8,12)
-#     nf=15
-#     nmf=24
 
 workload = args.wl
 eval_start_cfg = args.ecfg
@@ -171,21 +142,19 @@ db_index = args.dbidx
 db_index_kb_folder = args.idxkb
 
 
-# args.is_eval_only = True
-# model_path = "/scratch/gilbreth/xxxxxxxxxx/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
-
 cd=(8,12)
-nf=15
-nmf=24
+nf=15 # Num Feature 
+nmf=24 # Num of meta features
 glb_exp_config = []
+
+# Keep all the machines in here for training, for inference keep the one that you are training for
 for p in [
-    # "intel_skx_4s_8n", 
-    # "ibm_power_2s_2n",
+    "intel_skx_4s_8n", 
     "amd_epyc7543_2s_8n",
-    # "amd_epyc7543_2s_2n", 
-    # "intel_sb_4s_4n",
-    # "nvidia_gh_1s_1n",
-    # "intel_ice_2s_2n",
+    "amd_epyc7543_2s_2n", 
+    "intel_sb_4s_4n",
+    "nvidia_gh_1s_1n",
+    # "ibm_power_2s_2n",
 ]:
     exp_config = ExpConfig(processor=p, 
                         chassis_dim=cd, 
@@ -211,35 +180,10 @@ for p in [
 obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
     = gen_token_for_all(glb_exp_config)
 
-# obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
-#     = gen_token(exp_config)
 
-
-# They should have stuff of all 
-
-
-
-# cut = int(obss.shape[0]*0.5)
-# obss = obss[:cut]
-# obss_s = obss_s[:cut]
-# obss_mask = obss_mask[:cut]
-# actions = actions[:cut]
-# stepwise_returns = stepwise_returns[:cut]
-# rtgs = rtgs[:cut]
-# done_idxs = done_idxs[:cut]
-# timesteps = timesteps[:cut]
-# meta_data = meta_data[:cut]
-# lengths = lengths[:cut]
-# benchmarks = benchmarks[:cut]
-# DF = pd.DataFrame(np.reshape(obss_s, (obss_s.shape[0], -1))[:1000]) 
-# DF.to_csv("data1.csv")
-
-
-# => my 
 obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
     = gen_token_for_eval_for_all(glb_exp_config)
-# obss_, obss_s_, obss_mask_, actions_, stepwise_returns_, rtgs_, done_idxs_, timesteps_, meta_data_, lengths_, benchmarks_ \
-#     = gen_token_for_eval(exp_config)
+
 
 print("============================================================================================================")
 print("create dataset finish.")
@@ -287,30 +231,6 @@ test_dataset = StateActionReturnDataset(
     obss_mask_, benchmarks_, stepwise_returns_, lengths_
     )
 
-# To check if loading is done correctly
-# loader = DataLoader(train_dataset, shuffle=True, pin_memory=True,
-#                                 batch_size=32)
-# pbar = enumerate(loader)
-# for it, (x, y, r, t, m_x, b, st, cir, l) in pbar:
-#     # states, actions, rtgs, timesteps, meta_states, benchmarks, stepwise_returns, circuit_feas_for_benchmark, length
-    
-#     # place data on the correct device
-#     x = x  # my=> (batch, context, 8*grid*grid)
-#     m_x = m_x  # my=> (batch, context, 6)
-#     y = y  # my=> (batch, context, 1)
-#     r = r  # my=> (batch, context, 1, 1) should be (batch, context, 1)
-#     t = t  # my=> (batch, context, 1)
-#     b = b  # my=> (batch, context, 1, 1)
-#     st = st  # my=> (batch, context, 1, 1)
-#     cir = cir  # my=> (batch, 768)
-#     l = l # my=> (batch, context)
-#     print(x.shape, y.shape, r.shape, t.shape, m_x.shape, b.shape, st.shape, cir.shape, l.shape)
-#     print(x[0, 5, :].view(-1, ))
-#     print(r[0].view(-1, ))
-#     zz = input()
-
-# print("!!!! max(timesteps)", max(timesteps))
-
 
 # Model tuning 
 mconf = GPTConfig(
@@ -318,10 +238,6 @@ mconf = GPTConfig(
     model_type="reward_conditioned", max_timestep=max(timesteps))
 
 model = GPT(mconf, exp_config)
-# model_path = None
-# model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2025-07-09-23-44-40-0.556.pkl"
-# model_path = "/scratch/gilbreth/xxxxxxxxxx/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
-# print(model_path)
 
 if model_path is not None:
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
@@ -338,7 +254,6 @@ get_parameter_number(model)
 epochs = args.epochs
 
 
-
 tconf = TrainerConfig(
     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
     lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(train_dataset)*args.context_length*3,
@@ -347,7 +262,6 @@ tconf = TrainerConfig(
     test_all_macro = args.test_all_macro)
 print("trainerconfig finish")
 
-# => my test_dataset in place of None
 trainer = Trainer(model, train_dataset, test_dataset, tconf, cfg_to_start_with, exp_config)
 print("trainer build finish")
 trainer.train()
