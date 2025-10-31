@@ -105,7 +105,7 @@ parser.add_argument('--wl', type=int, default=11)
 parser.add_argument('--ecfg', type=int, default=30)
 parser.add_argument('--sidx', type=int, default=1)
 parser.add_argument('--p', type=str, default="amd_epyc7543_2s_8n")
-parser.add_argument('--mpath', type=str, default="/scratch/gilbreth/xxxxxxx/save_models/d3rlpy_cql_models/model.d3")
+parser.add_argument('--mpath', type=str, default="/scratch/yyyyyy/xxxxxxx/save_models/d3rlpy_cql_models/model.d3")
 parser.add_argument('--dbidx', type=int, default=0)
 parser.add_argument('--idxkb', type=str, default="kb_b")  # kb_b__ was for amd with the fsanitizer stuff
 parser.add_argument('--ablation_study', action='store_true', help='Enable ablation study mode')
@@ -119,7 +119,7 @@ parser.add_argument('--n_head', type=int, default=8, help='Number of attention h
 parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 parser.add_argument('--finetuning', action='store_true', help='Enable finetuning mode (saves models to separate directory)')
-parser.add_argument('--save_path', type=str, default='/scratch/gilbreth/xxxxxxx/save_models/d3rlpy_cql_models/', help='Directory to save trained models')
+parser.add_argument('--save_path', type=str, default='/scratch/yyyyyy/xxxxxxx/save_models/d3rlpy_cql_models/', help='Directory to save trained models')
 
 # changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
