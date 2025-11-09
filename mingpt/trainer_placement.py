@@ -167,7 +167,11 @@ class Trainer:
 							model_type = getattr(self.model.module, 'model_type', None)
 
 						if model_type == 'reward_conditioned':
-							if self.exp_config.generalization_study:
+							if self.exp_config.post_train:
+								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/post_train/{self.exp_config.processor}/"
+							elif self.exp_config.self_study:
+								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/self_study/{self.exp_config.exclude_machine}/"
+							elif self.exp_config.generalization_study:
 								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/base_models/{self.exp_config.exclude_machine}/{self.exp_config.index}"
 							elif self.exp_config.ablation_study:
 								if self.exp_config.ablation_param == 'num_layer':
@@ -180,7 +184,10 @@ class Trainer:
 								# save_models_dir = "/scratch/gilbreth/yrayhan/save_models/base_models/" + str(self.exp_config.index)
 								save_models_dir = "/scratch/gilbreth/yrayhan/save_models/log_base_models/" + str(self.exp_config.index)
 						else:
-							save_models_dir = "/scratch/gilbreth/yrayhan/save_models/bc_models/" + str(self.exp_config.index)
+							if self.exp_config.post_train:
+								save_models_dir = f"/scratch/gilbreth/yrayhan/save_models/post_train_bc/{self.exp_config.processor}/{self.exp_config.index}"
+							else:
+								save_models_dir = "/scratch/gilbreth/yrayhan/save_models/bc_models/" + str(self.exp_config.index)
 
 					os.makedirs(save_models_dir, exist_ok=True)
 					torch.save(raw_model.state_dict(), save_models_dir+"/{}-{:.3f}.pkl".format(strftime, accs.mean()))
@@ -368,10 +375,10 @@ class Trainer:
 		# ------------------------------------------------------------
 		# sampled_action = (1, 1), action_probs = (1, vocab_size)
 		sampled_action, action_probs = infer_action(
-			self.model, state.unsqueeze(0), 1, self.exp_config, 
-			temperature=1.0, sample=True, actions=None, 
-			rtgs=torch.tensor(rtgs, dtype=torch.float32).to(self.device).unsqueeze(0).unsqueeze(-1), 
-			timesteps = torch.arange(0, 2, dtype = torch.int64).reshape(1, 2, 1).to(self.device), 
+			self.model, state.unsqueeze(0), 1, self.exp_config,
+			temperature=self.exp_config.temperature, sample=True, actions=None,
+			rtgs=torch.tensor(rtgs, dtype=torch.float32).to(self.device).unsqueeze(0).unsqueeze(-1),
+			timesteps = torch.arange(0, 2, dtype = torch.int64).reshape(1, 2, 1).to(self.device),
 			meta_state = meta_state, benchmarks = benchmark_id.to(self.device),
 			stepwise_returns = None,
 			circuit_feas = circuit_feas_for_benchmark.to(self.device),
@@ -466,11 +473,11 @@ class Trainer:
 			# print(rtgs)
 
 			sampled_action, action_probs = infer_action(
-				self.model, state.unsqueeze(0), 1, 
-				self.exp_config, 
-				temperature=1.0, sample=True, 
+				self.model, state.unsqueeze(0), 1,
+				self.exp_config,
+				temperature=self.exp_config.temperature, sample=True,
 				actions=torch.tensor(np.array(actions), dtype=torch.float32).to(self.device).unsqueeze(0),
-				rtgs=torch.tensor(rtgs, dtype=torch.float32).to(self.device).unsqueeze(0).unsqueeze(-1), 
+				rtgs=torch.tensor(rtgs, dtype=torch.float32).to(self.device).unsqueeze(0).unsqueeze(-1),
 				timesteps = torch.arange(0, min(j+2, seq_len), dtype= torch.int64).reshape(1, -1, 1).to(self.device),
 				meta_state = meta_state.unsqueeze(0), benchmarks = benchmark_id.to(self.device),
 				stepwise_returns = None,

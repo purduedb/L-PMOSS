@@ -35,10 +35,10 @@ class Machine:
 
 class ExpConfig:
     def __init__(self, processor, chassis_dim, index, workload, num_features, num_meta_features,
-                 cnt_grid_cells, cfg_par, per_cfg_sample, policy_dim, 
+                 cnt_grid_cells, cfg_par, per_cfg_sample, policy_dim,
                  rtg_scale, rtg_div, eval_start_cfg, idx_kb_folder, save_idx,
                  ablation_study=False, ablation_param=None, generalization_study=False, exclude_machine=None,
-                 n_layer=6, n_head=8, n_embd=128):
+                 self_study=False, n_layer=6, n_head=8, n_embd=128, temperature=1.0, post_train=False):
         self.processor = processor
         self.chassis_dim = chassis_dim  # A tuple (x, y)
         self.index = index  # The name of the index used in the experiment
@@ -66,18 +66,28 @@ class ExpConfig:
         self.kb_path = os.path.join(current_folder + "/kbs/" + 
                                                vendor + "/" + cpu + "/" + 
                                                self.idx_kb_folder +"/"
-                                               )                                               
-        self.save_idx = save_idx    
+                                               )   
+        # if post_train is set then a different path
+        self.post_train = post_train
+        if self.post_train:
+            print("Post-training mode: using kbs_post_train directory for knowledge base.")
+            self.kb_path = os.path.join(current_folder + "/kbs_post_train/" + 
+                                               vendor + "/" + cpu + "/" + 
+                                               self.idx_kb_folder +"/"
+                                               )
+
+        self.save_idx = save_idx
         self.num_global_meta_features = 24
         self.ablation_study = ablation_study
         self.ablation_param = ablation_param
         self.generalization_study = generalization_study
         self.exclude_machine = exclude_machine
+        self.self_study = self_study
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_embd = n_embd
-
-
+        self.temperature = temperature
+        
     def __repr__(self):
       return (f"ExpConfig(processor={self.processor}\n"
               f"chassis_dim={self.chassis_dim}\n" 

@@ -988,7 +988,7 @@ def gen_token_for_eval_for_all(glb_exp_config):
 				
 				if cfg_!= exp_config.eval_start_cfg and wl_ != exp_config.workload:
 						continue
-				print(_, cfg_, wl_)
+				# print(_, cfg_, wl_)
 				# Load the actions (how many for each complete row? = no of grid cells)
 				act_ = load_actions(exp_config, cfg_, wl_)
 				actions.append(act_)

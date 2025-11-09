@@ -70,6 +70,10 @@ parser.add_argument('--n_head', type=int, default=8, help='Number of attention h
 parser.add_argument('--n_embd', type=int, default=128, help='Embedding dimension')
 parser.add_argument('--model_type', type=str, default='reward_conditioned', choices=['reward_conditioned', 'naive'], help='Type of model to use (reward_conditioned or naive)')
 parser.add_argument('--save_model_path', type=str, default=None, help='Custom path to save models (overrides default paths)')
+parser.add_argument('--self_study', action='store_true', help='Enable generalization study mode')
+parser.add_argument('--temperature', type=float, default=1.0, help='Temperature for action sampling during inference')
+parser.add_argument('--post_train', action='store_true', help='Post-training/fine-tuning mode: saves models to post_train directory')
+
 
 # changed kb_b for idx kb and kbs to kbs_train
 args = parser.parse_args()
@@ -154,8 +158,7 @@ rtg_scale = args.rtg
 cfg_to_start_with = args.ecfg
 db_index = args.dbidx
 db_index_kb_folder = args.idxkb
-
-db_index_kb_folder = "kb_b_dynam"
+# db_index_kb_folder = "kb_b_dynam"
 
 # args.is_eval_only = True
 # model_path = "/scratch/gilbreth/yrayhan/save_models/intel_sb_4s_4n/0/2025-07-10-17-29-23-0.952.pkl"
@@ -165,24 +168,24 @@ nf=15
 nmf=24
 glb_exp_config = []
 for p in [
-    "intel_skx_4s_8n", 
+    # "intel_skx_4s_8n", 
     # "amd_epyc7543_2s_8n",
     # "amd_epyc7543_2s_2n", 
     # "intel_sb_4s_4n",
-    # "nvidia_gh_1s_1n",
+    "nvidia_gh_1s_1n",
     # "ibm_power_2s_2n",
     # "intel_ice_2s_2n",
 ]:
-    exp_config = ExpConfig(processor=p, 
-                        chassis_dim=cd, 
+    exp_config = ExpConfig(processor=p,
+                        chassis_dim=cd,
                         index=db_index,
                         workload=workload,
-                        num_features=nf, 
-                        num_meta_features=nmf, 
-                        cnt_grid_cells=256, 
-                        cfg_par=5, #===============================>
-                        per_cfg_sample=7, # 5
-                        policy_dim = (16, 16), 
+                        num_features=nf,
+                        num_meta_features=nmf,
+                        cnt_grid_cells=256,
+                        cfg_par=4, #===============================>
+                        per_cfg_sample=7, # 7
+                        policy_dim = (16, 16),
                         rtg_scale=rtg_scale,
                         rtg_div=100000,
                         eval_start_cfg=eval_start_cfg,
@@ -195,21 +198,17 @@ for p in [
                         n_layer = args.n_layer,
                         n_head = args.n_head,
                         n_embd = args.n_embd,
+                        self_study = args.self_study,
+                        temperature = args.temperature,
+                        post_train = args.post_train
                        )
     glb_exp_config.append(exp_config)
 
 # collect_stats_about_offline_dataset(glb_exp_config)
 
 
-# obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
-#     = gen_token_for_all(glb_exp_config)
-
-# obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
-#     = gen_token(exp_config)
-
-
-# They should have stuff of all 
-
+obss, obss_s, obss_mask, actions, stepwise_returns, rtgs, done_idxs, timesteps, meta_data, lengths, benchmarks \
+    = gen_token_for_all(glb_exp_config)
 
 
 # cut = int(obss.shape[0]*0.5)
@@ -267,12 +266,14 @@ logging.basicConfig(
 
 # my=>
 context_length = exp_config.cnt_grid_cells
-# train_dataset = StateActionReturnDataset(
-#     exp_config,
-#     obss, context_length*3, actions, 
-#     done_idxs, rtgs, timesteps, meta_data, obss_s, 
-#     obss_mask, benchmarks, stepwise_returns, lengths
-#     )
+# if not args.is_eval_only:
+train_dataset = StateActionReturnDataset(
+    exp_config,
+    obss, context_length*3, actions, 
+    done_idxs, rtgs, timesteps, meta_data, obss_s, 
+    obss_mask, benchmarks, stepwise_returns, lengths
+    )
+
 test_dataset = StateActionReturnDataset(
     exp_config,
     obss_, context_length*3, actions_, 
@@ -307,14 +308,17 @@ test_dataset = StateActionReturnDataset(
 
 # Model tuning 
 model_type = args.model_type
-# mconf = GPTConfig(
-#     train_dataset.vocab_size, train_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
-#     model_type=model_type, max_timestep=max(timesteps)
-#     )
+# if not args.is_eval_only:
 mconf = GPTConfig(
-    test_dataset.vocab_size, test_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
-    model_type=model_type, max_timestep=max(timesteps_)
+    train_dataset.vocab_size, train_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
+    model_type=model_type, max_timestep=max(timesteps)
     )
+# else:
+#     mconf = GPTConfig(
+#         test_dataset.vocab_size, test_dataset.block_size, n_layer=args.n_layer, n_head=args.n_head, n_embd=args.n_embd, 
+#         model_type=model_type, max_timestep=max(timesteps_)
+#         )
+
 model = GPT(mconf, exp_config)
 # model_path = None
 # model_path = "save_models/" + exp_config.processor + "/" + str(exp_config.index) + "/" + "2025-07-09-23-44-40-0.556.pkl"
@@ -352,24 +356,28 @@ epochs = args.epochs
 
 
 
-    
-# tconf = TrainerConfig(
-#     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
-#     lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(train_dataset)*args.context_length*3,
-#     num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps),
-#     draw_placement = True, is_eval_only = args.is_eval_only,
-#     test_all_macro = args.test_all_macro, save_model_path=args.save_model_path)
+# if not args.is_eval_only:
 tconf = TrainerConfig(
     max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
-    lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(test_dataset)*args.context_length*3,
-    num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps_),
+    lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(train_dataset)*args.context_length*3,
+    num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps),
     draw_placement = True, is_eval_only = args.is_eval_only,
     test_all_macro = args.test_all_macro, save_model_path=args.save_model_path)
+# else:
+#     tconf = TrainerConfig(
+#         max_epochs=epochs, batch_size=args.batch_size, learning_rate=6e-4,
+#         lr_decay=True, warmup_tokens=512*20, final_tokens=2*len(test_dataset)*args.context_length*3,
+#         num_workers=1, seed=args.seed, model_type=model_type, max_timestep=max(timesteps_),
+#         draw_placement = True, is_eval_only = args.is_eval_only,
+#         test_all_macro = args.test_all_macro, save_model_path=args.save_model_path)
 print("trainerconfig finish")
 
 # => my test_dataset in place of None
-# trainer = Trainer(model, train_dataset, test_dataset, tconf, cfg_to_start_with, exp_config)
-trainer = Trainer(model, None, test_dataset, tconf, cfg_to_start_with, exp_config)
+if not args.is_eval_only:
+    trainer = Trainer(model, train_dataset, test_dataset, tconf, cfg_to_start_with, exp_config)
+else:
+    trainer = Trainer(model, None, test_dataset, tconf, cfg_to_start_with, exp_config)
+
 print("trainer build finish")
 trainer.train()
 
